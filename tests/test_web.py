@@ -1,5 +1,5 @@
 """
-Tests for app.web — Flask routes, helpers, and form handling.
+Tests for app.web: Flask routes, helpers, and form handling.
 """
 
 import copy
@@ -902,7 +902,7 @@ def test_dashboard_footer_shows_single_version_no_duplicate(flask_client):
     resp = flask_client.get("/")
     assert resp.status_code == 200
     text = resp.data.decode("utf-8")
-    # Footer format: AviationWX.org Archiver vX.X.X — Part of... MIT License
+    # Footer format: AviationWX.org Archiver vX.X.X | Part of... MIT License
     assert "AviationWX.org Archiver" in text
     assert "Part of the" in text
     assert "AviationWX.org" in text

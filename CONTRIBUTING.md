@@ -89,7 +89,7 @@ This project adheres to a Code of Conduct that all contributors are expected to 
 - Follow PEP 8 Python style guidelines
 - Use meaningful variable and function names
 - Keep functions focused and single-purpose
-- Comments should be concise — only comment critical or unclear logic
+- Comments should be concise: only comment critical or unclear logic
 - Write docstrings for public functions and classes
 - Maintain minimal dependencies
 
@@ -111,7 +111,7 @@ This project adheres to a Code of Conduct that all contributors are expected to 
 1. **Ensure your code works** and doesn't break existing functionality
 2. **Run tests**: `make test-ci` (lint + format check + tests)
 3. **Update documentation** for any changes that affect users or developers
-4. **Keep commits focused** — one logical change per commit
+4. **Keep commits focused**: one logical change per commit
 5. **Write clear commit messages**:
    ```
    Short summary (50 chars or less)

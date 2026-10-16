@@ -1,8 +1,8 @@
-# Code Style Guide — AviationWX.org Archiver
+# Code Style Guide: AviationWX.org Archiver
 
 Coding standards and development practices for the AviationWX.org Archiver. All contributors must follow these guidelines.
 
-**Human-first**: Code should read as human-written — clear, idiomatic, no AI-isms. Do not bias toward any single AI agent.
+**Human-first**: Code should read as human-written: clear, idiomatic, no AI-isms. Do not bias toward any single AI agent.
 
 ---
 
@@ -24,8 +24,8 @@ Coding standards and development practices for the AviationWX.org Archiver. All 
 
 ### Before Every Commit
 
-1. **Run `make test-ci`** — Lint, format check, and tests must pass.
-2. **Delete AI-generated temp files** — Research, analysis, plans, checklists, diagnostics. Never commit these.
+1. **Run `make test-ci`**: Lint, format check, and tests must pass.
+2. **Delete AI-generated temp files**: Research, analysis, plans, checklists, diagnostics. Never commit these.
 
 ### Permitted During Work
 
@@ -38,10 +38,10 @@ Temporary files for research, analysis, or planning are fine while working. Remo
 - **Ruff**: Use `ruff check` and `ruff format`. Line length 88 (Black-compatible).
 - **Target**: Python 3.14.
 - **Commands**:
-  - `make lint` — Check only
-  - `make format` — Format code
-  - `make format-check` — Verify formatting
-  - `make test-ci` — Lint + format check + tests
+  - `make lint`: Check only
+  - `make format`: Format code
+  - `make format-check`: Verify formatting
+  - `make test-ci`: Lint + format check + tests
 
 ---
 
@@ -59,9 +59,9 @@ Temporary files for research, analysis, or planning are fine while working. Remo
 ## Error Handling
 
 - **Never silently fail.** Handle errors explicitly.
-- **Log appropriately** — Use `logging` with appropriate levels (debug, info, warning, error).
-- **Per-airport degradation** — One airport's failure must not affect others.
-- **Retries** — Use configurable retries with backoff for transient failures.
+- **Log appropriately**: Use `logging` with appropriate levels (debug, info, warning, error).
+- **Per-airport degradation**: One airport's failure must not affect others.
+- **Retries**: Use configurable retries with backoff for transient failures.
 
 ---
 
@@ -69,7 +69,7 @@ Temporary files for research, analysis, or planning are fine while working. Remo
 
 - **Framework**: pytest.
 - **Naming**: `test_function_name_scenario_expected_behavior`.
-- **Mocks**: Mock I/O (HTTP, filesystem) — tests must not require network.
+- **Mocks**: Mock I/O (HTTP, filesystem): tests must not require network.
 - **Coverage**: Bug fixes must include a test that would have caught the bug.
 - **TDD**: Prefer writing tests first when adding new behavior.
 
@@ -97,7 +97,7 @@ def fetch_airport_list(config: dict) -> list[dict]:
 
 ## Comments
 
-- **Focus on "why"** — Not "what". Code should be self-documenting.
+- **Focus on "why"**: Not "what". Code should be self-documenting.
 - **DO** comment: Complex logic, non-obvious behavior, safety-critical paths.
 - **DON'T** comment: Self-explanatory code, obvious operations.
 
@@ -105,14 +105,14 @@ def fetch_airport_list(config: dict) -> list[dict]:
 
 ## Dependencies
 
-- **Minimal** — Add dependencies only when justified.
-- **Pin versions** — Use `>=` with minimum in requirements.txt.
-- **Separate** — `requirements.txt` (runtime), `requirements-dev.txt` (test, lint).
+- **Minimal**: Add dependencies only when justified.
+- **Pin versions**: Use `>=` with minimum in requirements.txt.
+- **Separate**: `requirements.txt` (runtime), `requirements-dev.txt` (test, lint).
 
 ---
 
 ## Configuration
 
-- **Single source** — `config/config.yaml` driven by `ARCHIVER_CONFIG` env var.
-- **Defaults** — Deep-merge user config over defaults. `ARCHIVER_*` env vars override file values.
-- **Never commit** — `config/config.yaml` is in `.gitignore`. Use `config.yaml.example` as template.
+- **Single source**: `config/config.yaml` driven by `ARCHIVER_CONFIG` env var.
+- **Defaults**: Deep-merge user config over defaults. `ARCHIVER_*` env vars override file values.
+- **Never commit**: `config/config.yaml` is in `.gitignore`. Use `config.yaml.example` as template.

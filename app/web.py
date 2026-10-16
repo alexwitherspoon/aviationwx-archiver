@@ -56,6 +56,7 @@ from app.constants import (
     DEFAULT_LOG_DISPLAY_COUNT,
     PERCENT_SCALE,
 )
+from app.ntp import get_ntp_status
 from app.scheduler import consume_archive_cache_dirty_flags, get_state, trigger_run
 from app.version import GIT_SHA, VERSION
 
@@ -165,9 +166,9 @@ def _parse_timestamp_from_filename(filename: str) -> str | None:
 
 @app.template_filter("timestamp_from_filename")
 def timestamp_from_filename_filter(filename: str) -> str:
-    """Parse UTC timestamp from filename, or return '—' if unparseable."""
+    """Parse UTC timestamp from filename, or return '-' if unparseable."""
     result = _parse_timestamp_from_filename(filename)
-    return result if result else "—"
+    return result if result else "-"
 
 
 def _effective_browse_airport_limit(config: dict | None) -> int:
@@ -546,6 +547,7 @@ def dashboard():
         recent_logs=recent_logs,
         config=config,
         config_errors=config_errors,
+        ntp_status=get_ntp_status(),
     )
 
 
@@ -774,7 +776,7 @@ def api_browse_files():
         rows.append(
             {
                 "name": fname,
-                "time_utc": ts if ts else "—",
+                "time_utc": ts if ts else "-",
                 "row": offset + i + 1,
                 "preview_slot": preview_lookup.get(fname, -1),
                 "is_image": _is_image_filename(fname),
@@ -839,6 +841,7 @@ def api_status():
         ),
         "run_count": state.get("run_count", 0),
         "last_stats": state.get("last_stats"),
+        "ntp": get_ntp_status(),
         "archive": archive_stats,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -891,11 +894,11 @@ def _form_to_config(form, existing_config: dict) -> dict:
     config["schedule"]["retention_on_archive_run"] = "retention_on_archive_run" in form
     retention_hour = int(form.get("retention_hour", 3))
     if not 0 <= retention_hour <= 23:
-        raise ValueError("retention_hour must be 0–23")
+        raise ValueError("retention_hour must be 0-23")
     config["schedule"]["retention_hour"] = retention_hour
     retention_minute = int(form.get("retention_minute", 0))
     if not 0 <= retention_minute <= 59:
-        raise ValueError("retention_minute must be 0–59")
+        raise ValueError("retention_minute must be 0-59")
     config["schedule"]["retention_minute"] = retention_minute
 
     # Airports

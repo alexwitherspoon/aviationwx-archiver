@@ -94,5 +94,5 @@ def test_codeql_pinned_sha_matches_github_release_tag():
 
     assert pinned == remote, (
         f"Workflow pins {pinned[:12]}… but peeled {tag} on github/codeql-action is "
-        f"{remote[:12]}… — update the workflow or the version comment."
+        f"{remote[:12]}…: update the workflow or the version comment."
     )

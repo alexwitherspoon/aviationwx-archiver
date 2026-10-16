@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — AviationWX Archiver{% endblock %}
+{% block title %}Dashboard: AviationWX Archiver{% endblock %}
 
 {% block content %}
 <h1>Dashboard</h1>
@@ -7,7 +7,7 @@
 
 {% if config_errors %}
 <div class="alert alert-error">
-  <strong>Configuration incomplete — archiving will not run until fixed.</strong>
+  <strong>Configuration incomplete: archiving will not run until fixed.</strong>
   <a href="{{ url_for('configuration') }}">Go to Config</a> to set up airports and save.
 </div>
 {% endif %}
@@ -75,6 +75,16 @@
           {% endif %}
         </span>
         <span>
+          Time:
+          {% if ntp_status.status == 'healthy' %}
+            <span class="badge badge-success">NTP healthy</span>
+          {% elif ntp_status.status == 'unhealthy' %}
+            <span class="badge badge-error">NTP unhealthy</span>
+          {% else %}
+            <span class="badge badge-warning">NTP unknown</span>
+          {% endif %}
+        </span>
+        <span>
           Last run:
           {% if state.last_run %}
             {{ state.last_run.strftime('%Y-%m-%d %H:%M:%S UTC') }}
@@ -95,7 +105,7 @@
 
       {% if state.last_stats %}
       <div style="margin-top:8px; font-size:12px; color:var(--text-muted);">
-        Last run stats —
+        Last run stats,
         airports: {{ state.last_stats.airports_processed }},
         fetched: {{ state.last_stats.images_fetched }},
         saved: {{ state.last_stats.images_saved }},
@@ -132,7 +142,7 @@
     {% endfor %}
   </div>
   {% else %}
-    <p class="empty">No log entries yet — run the archiver to see activity here.</p>
+    <p class="empty">No log entries yet: run the archiver to see activity here.</p>
   {% endif %}
 </div>
 

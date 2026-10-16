@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Configuration — AviationWX Archiver{% endblock %}
+{% block title %}Configuration: AviationWX Archiver{% endblock %}
 
 {% block content %}
 <h1>Configuration</h1>
@@ -8,7 +8,7 @@
 
 {% if config_errors %}
 <div class="alert alert-error">
-  <strong>Configuration incomplete — archiving will not run until these are fixed:</strong>
+  <strong>Configuration incomplete: archiving will not run until these are fixed:</strong>
   <ul style="margin:8px 0 0 0; padding-left:20px;">
     {% for err in config_errors %}
     <li>{{ err }}</li>
@@ -103,7 +103,7 @@
       <label for="archive_all" style="margin:0; color:var(--text)">Archive ALL airports available on AviationWX.org</label>
     </div>
     <div id="selected-block" {% if config.airports.archive_all %}style="display:none"{% endif %}>
-      <label for="selected_airports">Airport codes to archive (one per line, or comma-separated) — required if not archiving all</label>
+      <label for="selected_airports">Airport codes to archive (one per line, or comma-separated): required if not archiving all</label>
       <textarea id="selected_airports" name="selected_airports" rows="6"
                 placeholder="KSPB&#10;KAWO&#10;KPWT">{{ config.airports.selected | join('\n') }}</textarea>
     </div>
@@ -122,7 +122,7 @@
       <div>
         <label for="api_key">Partner API key</label>
         <input type="password" id="api_key" name="api_key" autocomplete="off"
-               placeholder="{% if config.source.get('api_key') %}•••••••• (leave blank to keep){% else %}Optional — enables 500 req/min{% endif %}">
+               placeholder="{% if config.source.get('api_key') %}•••••••• (leave blank to keep){% else %}Optional: enables 500 req/min{% endif %}">
         <small style="color:var(--text-muted)">Higher rate limits. Get a key at aviationwx.org.</small>
       </div>
       <div>

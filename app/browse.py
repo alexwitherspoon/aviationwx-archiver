@@ -30,7 +30,7 @@ def _browse_segment_invalid_chars(segment: str) -> bool:
 
 
 def parse_browse_path(path: str | None) -> tuple[str, ...]:
-    """Parse URL path query into 0–5 path segments. Raises ValueError if invalid."""
+    """Parse URL path query into 0-5 path segments. Raises ValueError if invalid."""
     if not path or not str(path).strip():
         return ()
     parts: list[str] = []
@@ -173,7 +173,7 @@ def index_list_all_filenames(
 
 
 def scandir_child_names(output_dir: str, prefix_parts: tuple[str, ...]) -> list[str]:
-    """Immediate subdirectories for non-index or partial walk (depth 0–4)."""
+    """Immediate subdirectories for non-index or partial walk (depth 0-4)."""
     if len(prefix_parts) > 4:
         return []
     base = os.path.join(output_dir, *prefix_parts)

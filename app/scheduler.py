@@ -22,6 +22,7 @@ from app.config import (
     validate_config,
 )
 from app.constants import DEFAULT_INTERVAL_MINUTES, DEFAULT_MAX_LOG_ENTRIES
+from app.ntp import get_ntp_status, ntp_is_healthy
 from app.worker import MSG_COMPLETE, MSG_LOG, run_archive_worker, run_retention_worker
 
 logger = logging.getLogger(__name__)
@@ -33,10 +34,10 @@ _state = {
     "last_run": None,  # datetime | None
     "last_stats": None,  # dict | None
     "next_run": None,  # datetime | None
-    "running": False,  # bool — True while a run is in progress
-    "_running_since": None,  # float | None — time.time() when run started
-    "_running_job": None,  # "archive" | "retention" | None — which job holds the lock
-    "run_count": 0,  # int — total number of completed runs
+    "running": False,  # bool: True while a run is in progress
+    "_running_since": None,  # float | None: time.time() when run started
+    "_running_job": None,  # "archive" | "retention" | None: which job holds the lock
+    "run_count": 0,  # int: total number of completed runs
     "log_entries": deque(maxlen=DEFAULT_MAX_LOG_ENTRIES),  # recent logs for web GUI
     "_stats_cache_dirty": False,  # web stats cache invalidation
     "_tree_cache_dirty": False,  # browse tree cache invalidation
@@ -57,7 +58,7 @@ def consume_archive_cache_dirty_flags() -> tuple[bool, bool]:
     Read and clear stats/tree cache dirty flags.
 
     Returns:
-        (stats_dirty, tree_dirty) — True if that cache should be invalidated.
+        (stats_dirty, tree_dirty): True if that cache should be invalidated.
 
     Web calls this before serving stats/tree. Avoids scheduler importing app.web.
     """
@@ -120,11 +121,20 @@ def _archive_job(config: dict) -> None:
             _append_log(f"Config error: {err}", "WARNING")
         return
 
+    # A wrong system clock corrupts archive file timestamps, so do not archive
+    # until the continuous NTP monitor reports a healthy clock.
+    if not ntp_is_healthy():
+        _append_log(
+            f"Archive run skipped: NTP time {get_ntp_status()['status']}.",
+            "ERROR",
+        )
+        return
+
     interval_minutes = max(
         1,
         config["schedule"].get("interval_minutes", DEFAULT_INTERVAL_MINUTES),
     )
-    # Stale threshold: 2x interval — if running longer, assume previous run died
+    # Stale threshold: 2x interval: if running longer, assume previous run died
     stale_threshold_seconds = interval_minutes * 2 * 60
 
     with _state_lock:
@@ -140,18 +150,18 @@ def _archive_job(config: dict) -> None:
                 and elapsed > stale_threshold_seconds
             ):
                 logger.warning(
-                    "Previous archive run appears stuck (%.0f min) — clearing lock.",
+                    "Previous archive run appears stuck (%.0f min): clearing lock.",
                     elapsed / 60,
                 )
                 _append_log(
-                    "Previous run appears stuck — clearing lock and starting new run.",
+                    "Previous run appears stuck: clearing lock and starting new run.",
                     "WARNING",
                 )
                 _state["running"] = False
                 _state["_running_since"] = None
                 _state["_running_job"] = None
             else:
-                logger.warning("Archive run skipped — previous run still in progress.")
+                logger.warning("Archive run skipped: previous run still in progress.")
                 return
         if not manual_trigger:
             _state["running"] = True
@@ -206,7 +216,7 @@ def _archive_job(config: dict) -> None:
                 else ""
             )
             msg = (
-                f"Archive run complete{suffix} — airports: "
+                f"Archive run complete{suffix}, airports: "
                 f"{stats['airports_processed']}, images fetched: "
                 f"{stats['images_fetched']}, saved: {stats['images_saved']}, "
                 f"errors: {stats['errors']}."
@@ -245,6 +255,15 @@ def _retention_job(config: dict) -> None:
             _append_log(f"Config error: {err}", "WARNING")
         return
 
+    # Retention deletes files by age, so a wrong clock could remove the wrong
+    # files. Skip until the continuous NTP monitor reports a healthy clock.
+    if not ntp_is_healthy():
+        _append_log(
+            f"Retention cleanup skipped: NTP time {get_ntp_status()['status']}.",
+            "ERROR",
+        )
+        return
+
     retention_days = config.get("archive", {}).get("retention_days", 0)
     retention_max_gb = config.get("archive", {}).get("retention_max_gb", 0)
     if isinstance(retention_max_gb, str):
@@ -259,8 +278,8 @@ def _retention_job(config: dict) -> None:
 
     with _state_lock:
         if _state["running"]:
-            logger.debug("Retention job skipped — another run in progress.")
-            _append_log("Retention skipped — another run in progress.", "INFO")
+            logger.debug("Retention job skipped: another run in progress.")
+            _append_log("Retention skipped: another run in progress.", "INFO")
             return
         _state["running"] = True
         _state["_running_since"] = time.time()
@@ -310,7 +329,7 @@ def _retention_job(config: dict) -> None:
         else:
             deleted = result.get("stats", {}).get("deleted", 0)
             _append_log(
-                f"Retention cleanup complete — deleted {deleted} file(s).", "INFO"
+                f"Retention cleanup complete: deleted {deleted} file(s).", "INFO"
             )
             with _state_lock:
                 _state["_stats_cache_dirty"] = True
@@ -394,11 +413,11 @@ def start_scheduler(config_getter) -> BackgroundScheduler:
         with _state_lock:
             _state["next_run"] = job.next_run_time
 
-    logger.info("Scheduler started — interval: %d minute(s).", interval_minutes)
-    _append_log(f"Scheduler started — interval: {interval_minutes} minute(s).", "INFO")
+    logger.info("Scheduler started, interval: %d minute(s).", interval_minutes)
+    _append_log(f"Scheduler started, interval: {interval_minutes} minute(s).", "INFO")
 
     if config["schedule"].get("fetch_on_start", True):
-        logger.info("fetch_on_start is enabled — running initial archive pass.")
+        logger.info("fetch_on_start is enabled: running initial archive pass.")
         _append_log("Running initial archive pass (fetch_on_start).", "INFO")
         sched = config.get("schedule") or {}
         delay_raw = sched.get("fetch_on_start_delay_seconds")
@@ -409,7 +428,7 @@ def start_scheduler(config_getter) -> BackgroundScheduler:
         )
         if delay_err or delay_parsed is None:
             logger.warning(
-                "Invalid schedule.fetch_on_start_delay_seconds (%r): %s — using 0.",
+                "Invalid schedule.fetch_on_start_delay_seconds (%r): %s, using 0.",
                 delay_raw,
                 delay_err,
             )

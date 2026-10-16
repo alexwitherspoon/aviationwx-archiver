@@ -1,5 +1,5 @@
 """
-Tests for main.py — startup helpers.
+Tests for main.py: startup helpers.
 """
 
 from app.constants import DEFAULT_WAITRESS_THREADS

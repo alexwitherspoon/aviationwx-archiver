@@ -805,7 +805,7 @@ def fetch_image_urls(airport: dict, config: dict) -> list[str]:
         logger.warning("Failed to fetch airport page for %s: %s", code, exc)
 
     logger.warning(
-        "No images found for %s — API (%s) and page scrape returned none. "
+        "No images found for %s: API (%s) and page scrape returned none. "
         "Check source.base_url and source.airports_api_url in config.",
         code,
         webcam_api,
@@ -1091,7 +1091,7 @@ def _get_existing_frames(output_dir: str, airport_code: str) -> set[tuple[int, i
 
 def _scrape_image_urls(html: str, base_url: str) -> list[str]:
     """
-    Very lightweight scraper — no external dependency, uses plain string search.
+    Very lightweight scraper: no external dependency, uses plain string search.
 
     Finds src attributes on <img> tags that look like webcam snapshots.
     """
@@ -2326,7 +2326,7 @@ def _run_archive_impl(
 
     if not airports:
         logger.warning(
-            "No airports to archive — check airports.archive_all or "
+            "No airports to archive: check airports.archive_all or "
             "airports.selected in config."
         )
         return stats
