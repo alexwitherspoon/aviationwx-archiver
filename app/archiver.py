@@ -95,7 +95,7 @@ def _try_index_lock(output_dir: str, timeout_sec: float):
         lock.acquire(timeout=timeout_sec)
         acquired = True
         yield True
-    except (Timeout, OSError):
+    except Timeout, OSError:
         yield False
     finally:
         if acquired:

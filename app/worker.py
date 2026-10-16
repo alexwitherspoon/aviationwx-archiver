@@ -66,7 +66,7 @@ def run_archive_worker(config: dict, result_queue: multiprocessing.Queue) -> Non
         try:
             os.nice(worker_nice)
             logger.debug("Worker nice set to +%d", worker_nice)
-        except (AttributeError, OSError):
+        except AttributeError, OSError:
             pass  # Unsupported (e.g. Windows) or permission denied
 
     try:
@@ -115,7 +115,7 @@ def run_retention_worker(config: dict, result_queue: multiprocessing.Queue) -> N
         try:
             os.nice(worker_nice)
             logger.debug("Retention worker nice set to +%d", worker_nice)
-        except (AttributeError, OSError):
+        except AttributeError, OSError:
             pass
 
     try:

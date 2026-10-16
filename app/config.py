@@ -180,7 +180,7 @@ def _env_overrides() -> dict:
                 parsed = _parse_env_list(val)
             else:
                 continue
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             logger.warning("Invalid env %s=%r; ignoring.", env_key, val)
             continue
         target = overrides
