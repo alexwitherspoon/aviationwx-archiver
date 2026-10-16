@@ -36,7 +36,7 @@ Temporary files for research, analysis, or planning are fine while working. Remo
 ## Formatting and Linting
 
 - **Ruff**: Use `ruff check` and `ruff format`. Line length 88 (Black-compatible).
-- **Target**: Python 3.12.
+- **Target**: Python 3.14.
 - **Commands**:
   - `make lint` — Check only
   - `make format` — Format code

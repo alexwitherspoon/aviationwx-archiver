@@ -22,7 +22,7 @@ env:
 jobs:
   resolve-version:
     name: Resolve version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Only run when CI succeeded, or manual dispatch
     if: >
       github.event_name == 'workflow_dispatch' ||
@@ -62,7 +62,7 @@ jobs:
 
   build-docker:
     name: Build and push Docker image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [resolve-version]
     if: needs.resolve-version.outputs.version != ''
     steps:
@@ -118,7 +118,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [build-docker, resolve-version]
     steps:
       - name: Checkout code

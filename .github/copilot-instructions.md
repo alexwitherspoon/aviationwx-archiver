@@ -10,7 +10,7 @@ Repository custom instructions for GitHub Copilot coding agent and code review. 
 
 ### Technology Stack
 
-- **Backend**: Python 3.12, Flask
+- **Backend**: Python 3.14, Flask
 - **Scheduler**: APScheduler
 - **Testing**: pytest, ruff (lint + format)
 - **Infrastructure**: Docker, multi-arch (amd64, arm64, arm/v7)

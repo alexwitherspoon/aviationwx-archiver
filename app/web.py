@@ -176,7 +176,7 @@ def _effective_browse_airport_limit(config: dict | None) -> int:
         return 0
     try:
         v = int((config.get("web") or {}).get("browse_airport_limit", 0) or 0)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
     return max(0, v)
 
@@ -194,7 +194,7 @@ def _effective_browse_page_size(config: dict | None) -> int:
             v = DEFAULT_BROWSE_PAGE_SIZE
         else:
             v = int(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return DEFAULT_BROWSE_PAGE_SIZE
     return max(1, min(v, 10_000))
 
@@ -209,7 +209,7 @@ def _effective_browse_preview_limit(config: dict | None) -> int:
             v = DEFAULT_BROWSE_PREVIEW_IMAGE_LIMIT
         else:
             v = int(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return DEFAULT_BROWSE_PREVIEW_IMAGE_LIMIT
     return max(1, min(v, 50_000))
 

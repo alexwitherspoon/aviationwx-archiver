@@ -167,7 +167,7 @@ The local web interface (default `http://localhost:8080`) provides:
 ## Development
 
 ```bash
-# Install dependencies (Python 3.12+)
+# Install dependencies (Python 3.14+)
 pip install -r requirements.txt -r requirements-dev.txt
 
 # Run tests (test-ci = lint + format check + tests, matches CI)
@@ -251,7 +251,7 @@ Create the host paths first (e.g. `mkdir -p /mnt/user/appdata/aviationwx/archive
 ## Requirements
 
 - Docker and Docker Compose (for containerised use), **or**
-- Python 3.12+ (for local development)
+- Python 3.14+ (for local development)
 
 ## Project Structure
 

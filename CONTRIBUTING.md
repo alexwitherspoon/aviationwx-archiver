@@ -14,7 +14,7 @@ This project adheres to a Code of Conduct that all contributors are expected to 
    git clone https://github.com/YOUR_USERNAME/aviationwx.org-archiver.git
    cd aviationwx.org-archiver
    ```
-3. **Set up local development** (Python 3.12+):
+3. **Set up local development** (Python 3.14+):
    ```bash
    # Copy the example config
    cp config/config.yaml.example config/config.yaml
