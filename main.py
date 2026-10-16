@@ -1,5 +1,5 @@
 """
-AviationWX.org Archiver — application entry point.
+AviationWX.org Archiver: application entry point.
 
 Starts the background scheduler and optionally the Flask web GUI.
 """
@@ -20,7 +20,7 @@ from app.config import (
     load_config,
 )
 from app.constants import DEFAULT_WAITRESS_THREADS
-from app.ntp import check_ntp_time
+from app.ntp import start_ntp_monitor
 from app.scheduler import start_scheduler
 from app.web import app
 
@@ -79,7 +79,7 @@ def _waitress_threads_runtime(config: dict) -> int:
     wt, err = _coerce_int_for_validation(raw, "web.waitress_threads")
     if err or wt is None:
         logger.warning(
-            "Invalid web.waitress_threads (%r): %s — using %d.",
+            "Invalid web.waitress_threads (%r): %s, using %d.",
             raw,
             err,
             DEFAULT_WAITRESS_THREADS,
@@ -103,7 +103,7 @@ def main() -> None:
     logger.info("AviationWX.org Archiver starting up.")
 
     check_host_resources(config)
-    check_ntp_time()
+    start_ntp_monitor()
 
     # Scheduler uses getter so web UI config changes take effect on next run
     app.config["ARCHIVER_CONFIG"] = config

@@ -1,5 +1,5 @@
 """
-Tests for app.scheduler — background job scheduling and trigger.
+Tests for app.scheduler: background job scheduling and trigger.
 """
 
 import copy
@@ -297,7 +297,7 @@ def test_archive_job_clears_stale_lock_and_proceeds():
         "last_stats": None,
         "next_run": None,
         "running": True,  # Stuck from previous run
-        "_running_since": time.time() - (45 * 60),  # 45 min ago — past 30 min threshold
+        "_running_since": time.time() - (45 * 60),  # 45 min ago: past 30 min threshold
         "_running_job": "archive",  # Stale override only applies to archive
         "run_count": 0,
         "log_entries": [],
@@ -353,7 +353,7 @@ def test_archive_job_skips_when_retention_running():
     config["airports"]["selected"] = ["KSPB"]
     config["schedule"]["interval_minutes"] = 15
 
-    # Retention running for 45 min — archive should skip (retention can run for hours)
+    # Retention running for 45 min: archive should skip (retention can run for hours)
     state_ref = {
         "last_run": None,
         "running": True,
@@ -531,3 +531,37 @@ def test_append_log_respects_deque_maxlen():
     finally:
         with _state_lock:
             _state["log_entries"] = previous
+
+
+def test_archive_job_skips_when_ntp_not_healthy():
+    """_archive_job skips (no worker) when the NTP health state is not healthy."""
+    from app.scheduler import _archive_job
+
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config["airports"]["selected"] = ["KSPB"]
+
+    with patch("app.scheduler.ntp_is_healthy", return_value=False):
+        with patch("app.worker.run_archive") as mock_run:
+            with patch("app.scheduler._append_log") as mock_append:
+                _archive_job(config)
+
+    mock_run.assert_not_called()
+    assert any("ntp time" in str(c).lower() for c in mock_append.call_args_list)
+
+
+def test_retention_job_skips_when_ntp_not_healthy():
+    """_retention_job skips when the NTP health state is not healthy."""
+    from app.scheduler import _retention_job
+
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config["archive"]["output_dir"] = "/tmp/archive"
+    config["archive"]["retention_days"] = 7
+    config["airports"]["selected"] = ["KSPB"]
+
+    with patch("app.scheduler.ntp_is_healthy", return_value=False):
+        with patch("app.worker.run_retention_worker") as mock_run:
+            with patch("app.scheduler._append_log") as mock_append:
+                _retention_job(config)
+
+    mock_run.assert_not_called()
+    assert any("ntp time" in str(c).lower() for c in mock_append.call_args_list)

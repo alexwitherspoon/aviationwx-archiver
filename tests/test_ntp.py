@@ -78,3 +78,66 @@ def test_check_ntp_time_returns_true_when_ntplib_missing():
         assert "not installed" in mock_logger.warning.call_args[0][0]
     finally:
         ntp.ntplib = orig_ntplib
+
+
+def test_ntp_is_healthy_reflects_status():
+    """ntp_is_healthy is True only for the healthy status."""
+    from app.ntp import ntp_is_healthy
+
+    with patch("app.ntp._state", {"status": "healthy"}):
+        assert ntp_is_healthy() is True
+    with patch("app.ntp._state", {"status": "unhealthy"}):
+        assert ntp_is_healthy() is False
+    with patch("app.ntp._state", {"status": "unknown"}):
+        assert ntp_is_healthy() is False
+
+
+def test_check_once_marks_healthy_when_offset_within_threshold():
+    """_check_once marks healthy when the offset is within threshold."""
+    from app.ntp import _check_once
+
+    state = {"status": "unknown"}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", return_value=0.5):
+            _check_once()
+
+    assert state["status"] == "healthy"
+    assert state["offset_sec"] == 0.5
+
+
+def test_check_once_marks_unhealthy_when_offset_exceeds_threshold():
+    """_check_once marks unhealthy when the offset exceeds the threshold."""
+    from app.ntp import _check_once
+
+    state = {"status": "healthy"}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", return_value=120.0):
+            _check_once()
+
+    assert state["status"] == "unhealthy"
+    assert state["offset_sec"] == 120.0
+
+
+def test_check_once_marks_unknown_when_query_fails():
+    """_check_once marks unknown (and records the error) when the query fails."""
+    from app.ntp import _check_once
+
+    state = {"status": "healthy"}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", side_effect=OSError("unreachable")):
+            _check_once()
+
+    assert state["status"] == "unknown"
+    assert state["last_error"] == "unreachable"
+
+
+def test_start_ntp_monitor_starts_daemon_thread():
+    """start_ntp_monitor launches a daemon thread."""
+    from app.ntp import start_ntp_monitor
+
+    with patch("app.ntp.threading.Thread") as mock_thread:
+        start_ntp_monitor()
+
+    mock_thread.assert_called_once()
+    assert mock_thread.call_args.kwargs["daemon"] is True
+    mock_thread.return_value.start.assert_called_once()

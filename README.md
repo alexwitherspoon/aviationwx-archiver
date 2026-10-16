@@ -6,29 +6,30 @@ Part of the [AviationWX.org](https://github.com/alexwitherspoon/aviationwx) proj
 
 ## Features
 
-- **Automated archiving** — fetches images from all or selected airports on a configurable schedule
-- **History API mode** — uses AviationWX history API to download all available frames, only missing ones; run every 15 min captures ~15 images per webcam (60s refresh)
-- **Round-robin prioritization** — cycles through all enabled airports, downloading the oldest pending frame from each per round to capture expiring history before it is lost
-- **Organised storage** — files saved as `archive/AIRPORT_CODE/YYYY/MM/DD/camera_name/filename`
-- **Single config file** — one YAML file drives the entire system (stored in named volume)
-- **Environment variable overrides** — configure via `ARCHIVER_*` env vars
-- **Web GUI** — local dashboard for monitoring, configuration, and browsing the archive
-- **Process-based workers** — archive jobs run in a separate process to avoid GIL contention; web UI stays responsive during runs
-- **Live log streaming** — worker forwards archiver logs to the main process in real time for the web UI
-- **Retention policy** — optional automatic cleanup of files older than N days
-- **File-based index** — fast stats and retention via `.archive_index.json`; atomic writes, inter-process locking (Windows/NFS supported via fallback), batched updates per run; falls back to full scan when missing or stale; auto-rebuilds on manual file changes
-- **Minimal dependencies** — Python + Flask + Requests + PyYAML + APScheduler + filelock
-- **Docker-first** — simple `docker compose up` to get started
+- **Automated archiving**: fetches images from all or selected airports on a configurable schedule
+- **History API mode**: uses AviationWX history API to download all available frames, only missing ones; run every 15 min captures ~15 images per webcam (60s refresh)
+- **Round-robin prioritization**: cycles through all enabled airports, downloading the oldest pending frame from each per round to capture expiring history before it is lost
+- **Organised storage**: files saved as `archive/AIRPORT_CODE/YYYY/MM/DD/camera_name/filename`
+- **Single config file**: one YAML file drives the entire system (stored in named volume)
+- **Environment variable overrides**: configure via `ARCHIVER_*` env vars
+- **Web GUI**: local dashboard for monitoring, configuration, and browsing the archive
+- **Process-based workers**: archive jobs run in a separate process to avoid GIL contention; web UI stays responsive during runs
+- **Live log streaming**: worker forwards archiver logs to the main process in real time for the web UI
+- **Retention policy**: optional automatic cleanup of files older than N days
+- **Time safety**: verifies the system clock against NTP every 5 minutes and blocks archiving until it is confirmed accurate (within 10s)
+- **File-based index**: fast stats and retention via `.archive_index.json`; atomic writes, inter-process locking (Windows/NFS supported via fallback), batched updates per run; falls back to full scan when missing or stale; auto-rebuilds on manual file changes
+- **Minimal dependencies**: Python + Flask + Requests + PyYAML + APScheduler + filelock
+- **Docker-first**: simple `docker compose up` to get started
 
 ## Quick Start
 
 ### Option A: Pull pre-built image (recommended)
 
 ```bash
-# Bleeding-edge (latest main) — use until first release
+# Bleeding edge (latest main)
 docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:edge
 
-# Latest stable — available after first tagged release (e.g. v1.0.0)
+# Latest stable release
 docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest
 ```
 
@@ -77,8 +78,8 @@ Key settings:
 | `schedule.job_timeout_minutes` | `30` | Max minutes per run when invoked directly (e.g. scripts). Scheduled runs use 90% of `interval_minutes`; next run resumes from where it stopped. |
 | `schedule.worker_nice` | `10` | Unix nice increment for worker process (higher = lower CPU priority). 0 = no change. Helps keep web UI responsive. |
 | `schedule.retention_on_archive_run` | `false` | When true, run retention at end of each archive run. For small archives only; large archives use the daily job. |
-| `schedule.retention_hour` | `3` | Daily retention cleanup hour (0–23, UTC). 3 = 3 AM. |
-| `schedule.retention_minute` | `0` | Daily retention cleanup minute (0–59). |
+| `schedule.retention_hour` | `3` | Daily retention cleanup hour (0-23, UTC). 3 = 3 AM. |
+| `schedule.retention_minute` | `0` | Daily retention cleanup minute (0-59). |
 | `airports.archive_all` | `false` | Archive every airport on AviationWX.org |
 | `airports.selected` | `[KSPB, KAWO]` | Specific airport codes when archive_all is false |
 | `source.use_history_api` | `true` | Use history API to fetch all frames, download only missing; `false` = current image only per run |
@@ -113,7 +114,7 @@ Any config setting can be overridden via `ARCHIVER_*` environment variables. Env
 
 Booleans: `true`, `false`, `1`, `0`, `yes`, `no`. Lists: comma- or newline-separated (e.g. `KSPB,KAWO`).
 
-**Example — configure entirely via env vars:**
+**Example: configure entirely via env vars:**
 
 ```bash
 mkdir -p archive
@@ -151,18 +152,18 @@ archive/
                     └── 20240615_143001_snapshot.webp
 ```
 
-- **metadata.json** — Full airport and webcams API response; overwritten each run (not versioned).
-- **.archive_index.json** — File index for fast stats and retention. Atomic writes, inter-process locking (`.archive_index.lock`), batched updates per run. Auto-updated on save/delete. Before use, a random sample of entries is spot-checked on disk; if any are missing or path-unsafe, the index is rebuilt from a full scandir. Rebuilds also occur on ENOENT during retention. Locking works on local FS, Windows, and NFS (soft-lock fallback). Delete this file to force a full rebuild.
-- **Camera names** — Sanitized for Linux: lowercase, spaces and hyphens → underscores.
+- **metadata.json**: Full airport and webcams API response; overwritten each run (not versioned).
+- **.archive_index.json**: File index for fast stats and retention. Atomic writes, inter-process locking (`.archive_index.lock`), batched updates per run. Auto-updated on save/delete. Before use, a random sample of entries is spot-checked on disk; if any are missing or path-unsafe, the index is rebuilt from a full scandir. Rebuilds also occur on ENOENT during retention. Locking works on local FS, Windows, and NFS (soft-lock fallback). Delete this file to force a full rebuild.
+- **Camera names**: Sanitized for Linux: lowercase, spaces and hyphens → underscores.
 
 ## Web GUI
 
 The local web interface (default `http://localhost:8080`) provides:
 
-- **Dashboard** — archive statistics, last/next run times, live log stream, manual trigger
-- **Browse** — explore archived images by airport → year → month → day
-- **Config** — edit all settings through a form (no file editing needed)
-- **API** — `GET /api/status` returns JSON status for health checks and monitoring
+- **Dashboard**: archive statistics, last/next run times, clock (NTP) health, live log stream, manual trigger
+- **Browse**: explore archived images by airport → year → month → day
+- **Config**: edit all settings through a form (no file editing needed)
+- **API**: `GET /api/status` returns JSON status for health checks and monitoring
 
 ## Development
 
@@ -191,10 +192,10 @@ Or set `archive.output_dir` in your config file.
 Pre-built images are published to GitHub Container Registry:
 
 ```bash
-# Bleeding-edge (latest main) — use this until first release
+# Bleeding edge (latest main)
 docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:edge
 
-# Latest stable — available after first tagged release (e.g. v1.0.0)
+# Latest stable release
 docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest
 ```
 
@@ -280,7 +281,7 @@ aviationwx.org-archiver/
 
 ## License
 
-MIT License — see [LICENSE](LICENSE)
+MIT License: see [LICENSE](LICENSE)
 
 ## Contributing
 
@@ -288,7 +289,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Please read [CODE_OF_COND
 
 ## Related Projects
 
-- [AviationWX.org](https://github.com/alexwitherspoon/aviationwx) — the main platform this tool archives
+- [AviationWX.org](https://github.com/alexwitherspoon/aviationwx): the main platform this tool archives
 
 ---
 

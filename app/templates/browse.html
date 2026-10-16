@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Browse Archive — AviationWX Archiver{% endblock %}
+{% block title %}Browse Archive: AviationWX Archiver{% endblock %}
 
 {% block content %}
 <h1>Browse Archive</h1>
@@ -236,7 +236,7 @@
     wrap.style.marginLeft = '16px';
     wrap.style.marginBottom = '8px';
     const title = el('h2');
-    title.textContent = path.replace(/\//g, ' — ');
+    title.textContent = path.replace(/\//g, ' - ');
     wrap.appendChild(title);
 
     const previewJson = JSON.stringify(firstPage.preview_images || []);
@@ -287,7 +287,7 @@
         td2.style.padding = '4px 8px';
         td2.style.color = 'var(--text-muted)';
         td2.style.fontSize = '11px';
-        td2.textContent = row.time_utc || '—';
+        td2.textContent = row.time_utc || '-';
         const td3 = el('td');
         td3.style.padding = '4px 8px';
         const rel = path + '/' + row.name;

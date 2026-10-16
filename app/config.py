@@ -339,11 +339,11 @@ def validate_config(config: dict) -> list[str]:
 
     retention_hour = config.get("schedule", {}).get("retention_hour", 3)
     if not 0 <= retention_hour <= 23:
-        errors.append("Schedule retention_hour must be 0–23 (UTC).")
+        errors.append("Schedule retention_hour must be 0-23 (UTC).")
 
     retention_minute = config.get("schedule", {}).get("retention_minute", 0)
     if not 0 <= retention_minute <= 59:
-        errors.append("Schedule retention_minute must be 0–59.")
+        errors.append("Schedule retention_minute must be 0-59.")
 
     sched = config.get("schedule") or {}
     delay_raw = sched.get("fetch_on_start_delay_seconds")

@@ -1,6 +1,6 @@
-# GitHub Copilot Instructions — AviationWX.org Archiver
+# GitHub Copilot Instructions: AviationWX.org Archiver
 
-Repository custom instructions for GitHub Copilot coding agent and code review. Focus on **repo health** — tests, config validation, structure. Not for biasing code generation.
+Repository custom instructions for GitHub Copilot coding agent and code review. Focus on **repo health**: tests, config validation, structure. Not for biasing code generation.
 
 ---
 
@@ -49,13 +49,13 @@ aviationwx.org-archiver/
 └── Dockerfile
 ```
 
-**Archive index**: `output_dir/.archive_index.json` — file-based index for fast stats/retention. Atomic writes, inter-process locking (filelock: fcntl/msvcrt with SoftFileLock fallback for NFS), batched updates per run. Uses scandir fallback when missing/stale; auto-rebuilds.
+**Archive index**: `output_dir/.archive_index.json`: file-based index for fast stats/retention. Atomic writes, inter-process locking (filelock: fcntl/msvcrt with SoftFileLock fallback for NFS), batched updates per run. Uses scandir fallback when missing/stale; auto-rebuilds.
 
 ---
 
 ## Code Conventions
 
-- **Follow [CODE_STYLE.md](CODE_STYLE.md)** — Human-first, no AI bias.
+- **Follow [CODE_STYLE.md](CODE_STYLE.md)**: Human-first, no AI bias.
 - **Pre-commit**: Run `make test-ci` before every commit.
 - **Cleanup**: Delete AI-generated temp files (research, analysis, plans) before committing.
 

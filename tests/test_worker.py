@@ -1,5 +1,5 @@
 """
-Tests for app.worker — archive worker process.
+Tests for app.worker: archive worker process.
 """
 
 import copy

@@ -1,5 +1,5 @@
 """
-Tests for app.config — configuration loading, validation, and host resource checks.
+Tests for app.config: configuration loading, validation, and host resource checks.
 """
 
 import os
