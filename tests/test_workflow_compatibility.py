@@ -41,14 +41,16 @@ def test_codeql_init_and_analyze_pins_match():
 
 
 def _github_get_json(url: str, timeout_s: float = 30.0) -> dict:
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        method="GET",
-    )
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    # Authenticate when a token is available: anonymous access is capped at
+    # 60 requests/hour per runner IP, which flakes under concurrent CI runs.
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers, method="GET")
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
@@ -96,3 +98,39 @@ def test_codeql_pinned_sha_matches_github_release_tag():
         f"Workflow pins {pinned[:12]}… but peeled {tag} on github/codeql-action is "
         f"{remote[:12]}…: update the workflow or the version comment."
     )
+
+
+def test_github_get_json_adds_auth_header_when_token_set(monkeypatch):
+    """_github_get_json authenticates when GITHUB_TOKEN is present."""
+    captured = {}
+
+    def fake_request(url, headers=None, method="GET"):
+        captured["headers"] = headers or {}
+        raise RuntimeError("stop")
+
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setattr(urllib.request, "Request", fake_request)
+
+    with pytest.raises(RuntimeError):
+        _github_get_json("https://api.github.com/repos/example/repo")
+
+    assert captured["headers"].get("Authorization") == "Bearer test-token"
+
+
+def test_github_get_json_omits_auth_header_without_token(monkeypatch):
+    """_github_get_json stays anonymous when no token is available."""
+    captured = {}
+
+    def fake_request(url, headers=None, method="GET"):
+        captured["headers"] = headers or {}
+        raise RuntimeError("stop")
+
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.setattr(urllib.request, "Request", fake_request)
+
+    with pytest.raises(RuntimeError):
+        _github_get_json("https://api.github.com/repos/example/repo")
+
+    assert "Authorization" not in captured["headers"]
