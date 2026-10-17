@@ -11,8 +11,8 @@ This project adheres to a Code of Conduct that all contributors are expected to 
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/aviationwx.org-archiver.git
-   cd aviationwx.org-archiver
+   git clone https://github.com/YOUR_USERNAME/aviationwx-archiver.git
+   cd aviationwx-archiver
    ```
 3. **Set up local development** (Python 3.14+):
    ```bash

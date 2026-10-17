@@ -30,7 +30,7 @@ ENV GIT_SHA=${GIT_SHA}
 
 LABEL org.opencontainers.image.title="AviationWX.org Archiver" \
       org.opencontainers.image.description="Archives webcam images from AviationWX.org" \
-      org.opencontainers.image.source="https://github.com/alexwitherspoon/aviationwx.org-archiver" \
+      org.opencontainers.image.source="https://github.com/alexwitherspoon/aviationwx-archiver" \
       org.opencontainers.image.licenses="MIT"
 
 # Create a non-root user for security

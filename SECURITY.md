@@ -19,7 +19,7 @@ If you discover a security vulnerability in the AviationWX.org Archiver, please 
 
 ### How to Report
 
-1. **Preferred**: Use [GitHub's private vulnerability reporting](https://github.com/alexwitherspoon/aviationwx.org-archiver/security/advisories/new) if enabled.
+1. **Preferred**: Use [GitHub's private vulnerability reporting](https://github.com/alexwitherspoon/aviationwx-archiver/security/advisories/new) if enabled.
 
 2. **Alternatively**: Email the maintainers with details. You can reach us via [AviationWX.org](https://aviationwx.org) or the repository owner's GitHub profile.
 
