@@ -39,8 +39,8 @@ Then run with volumes (see Docker section below).
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/alexwitherspoon/aviationwx.org-archiver.git
-cd aviationwx.org-archiver
+git clone https://github.com/alexwitherspoon/aviationwx-archiver.git
+cd aviationwx-archiver
 
 # 2. Create the archive directory (entrypoint fixes permissions on first run)
 mkdir -p archive
@@ -257,7 +257,7 @@ Create the host paths first (e.g. `mkdir -p /mnt/user/appdata/aviationwx/archive
 ## Project Structure
 
 ```
-aviationwx.org-archiver/
+aviationwx-archiver/
 ├── app/
 │   ├── archiver.py        # image fetching, archival logic, file index, retention
 │   ├── config.py          # YAML config loader/saver

@@ -37,7 +37,7 @@ Repository custom instructions for GitHub Copilot coding agent and code review. 
 ## Project Layout
 
 ```
-aviationwx.org-archiver/
+aviationwx-archiver/
 ├── app/
 │   ├── archiver.py    # Core fetch/save logic, file index, retention
 │   ├── config.py      # YAML config loader

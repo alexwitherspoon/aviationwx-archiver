@@ -520,7 +520,7 @@ def _utc_dt_to_local_ymd(dt: datetime, tz_name: str) -> tuple[str, str, str]:
 # Python requests default is often blocked by WAF.
 _USER_AGENT = (
     "Mozilla/5.0 (compatible; AviationWX-Archiver/1.0; "
-    "+https://github.com/alexwitherspoon/aviationwx.org-archiver)"
+    "+https://github.com/alexwitherspoon/aviationwx-archiver)"
 )
 
 
