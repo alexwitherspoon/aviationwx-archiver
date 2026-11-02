@@ -886,6 +886,18 @@ def test_status_url_returns_empty_when_no_airports_url():
     assert _status_url({"source": {"airports_api_url": ""}}) == ""
 
 
+def test_status_url_targets_final_airports_segment():
+    """_status_url swaps the final /airports segment, ignoring a proxy prefix."""
+    from app.archiver import _status_url
+
+    config = {
+        "source": {
+            "airports_api_url": "https://api.example.com/airports-proxy/v1/airports"
+        }
+    }
+    assert _status_url(config) == "https://api.example.com/airports-proxy/v1/status"
+
+
 def test_detect_and_set_request_delay_uses_partner_limit_when_200_with_header():
     """_detect_and_set_request_delay sets 50% of limit when header present."""
     from app.archiver import _detect_and_set_request_delay

@@ -536,9 +536,15 @@ def _api_headers(config: dict) -> dict:
 def _status_url(config: dict) -> str:
     """Derive /v1/status URL from airports_api_url."""
     url = config.get("source", {}).get("airports_api_url", "")
-    if "/airports" in url:
-        return url.replace("/airports", "/status")
-    return url.rstrip("/").rsplit("/", 1)[0] + "/status" if url else ""
+    if not url:
+        return ""
+    scheme, netloc, path, query, fragment = urlsplit(url)
+    head, sep, tail = path.rpartition("/airports")
+    if sep:
+        path = f"{head}/status{tail}"
+    else:
+        path = path.rstrip("/").rsplit("/", 1)[0] + "/status"
+    return urlunsplit((scheme, netloc, path, query, fragment))
 
 
 def _bulk_api_url(config: dict) -> str:
