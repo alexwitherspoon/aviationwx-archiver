@@ -44,9 +44,6 @@ schedule:
 # AviationWX.org Source
 # ============================================================
 source:
-  # Base URL of the AviationWX.org platform
-  base_url: https://aviationwx.org
-
   # Public API endpoint for airport list
   airports_api_url: https://api.aviationwx.org/v1/airports
 
@@ -77,7 +74,7 @@ airports:
   # Airport codes (ICAO/FAA). Used only when archive_all is false.
   selected:
     - KSPB
-    - KAWO
+    - KHIO
 
 # ============================================================
 # Web GUI

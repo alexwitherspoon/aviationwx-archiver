@@ -15,7 +15,7 @@ services:
       - ARCHIVER_CONFIG=/config/config.yaml
       # Optional ARCHIVER_* overrides (see README)
       # - ARCHIVER_SCHEDULE_INTERVAL_MINUTES=15
-      # - ARCHIVER_AIRPORTS_SELECTED=KSPB,KAWO
+      # - ARCHIVER_AIRPORTS_SELECTED=KSPB,KHIO
 
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
