@@ -18,7 +18,7 @@ import random
 import re
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import requests
@@ -544,9 +544,14 @@ def _status_url(config: dict) -> str:
 def _bulk_api_url(config: dict) -> str:
     """Derive /v1/weathercam/bulk URL from airports_api_url."""
     url = config.get("source", {}).get("airports_api_url", "")
-    if "/airports" in url:
-        return url.replace("/airports", "/weathercam/bulk")
-    return url.rstrip("/").rsplit("/", 1)[0] + "/weathercam/bulk" if url else ""
+    if not url:
+        return ""
+    scheme, netloc, path, query, fragment = urlsplit(url)
+    if "/airports" in path:
+        path = path.replace("/airports", "/weathercam/bulk", 1)
+    else:
+        path = path.rstrip("/").rsplit("/", 1)[0] + "/weathercam/bulk"
+    return urlunsplit((scheme, netloc, path, query, fragment))
 
 
 def _detect_and_set_request_delay(config: dict) -> None:

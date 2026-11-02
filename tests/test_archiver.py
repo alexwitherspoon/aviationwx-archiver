@@ -1179,6 +1179,21 @@ def test_bulk_api_url_derives_from_airports_api_url():
     assert _bulk_api_url(config) == "https://api.example.com/v1/weathercam/bulk"
 
 
+def test_bulk_api_url_preserves_scheme_host_and_query():
+    """_bulk_api_url swaps only the path segment, keeping host and query."""
+    from app.archiver import _bulk_api_url
+
+    config = {
+        "source": {
+            "airports_api_url": "https://api.example.com/v9/airports?fmt=json#top"
+        }
+    }
+    assert (
+        _bulk_api_url(config)
+        == "https://api.example.com/v9/weathercam/bulk?fmt=json#top"
+    )
+
+
 def test_fetch_webcam_catalog_success():
     """fetch_webcam_catalog returns airports from a successful API response."""
     from app.archiver import fetch_webcam_catalog
