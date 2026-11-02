@@ -541,6 +541,14 @@ def _status_url(config: dict) -> str:
     return url.rstrip("/").rsplit("/", 1)[0] + "/status" if url else ""
 
 
+def _bulk_api_url(config: dict) -> str:
+    """Derive /v1/weathercam/bulk URL from airports_api_url."""
+    url = config.get("source", {}).get("airports_api_url", "")
+    if "/airports" in url:
+        return url.replace("/airports", "/weathercam/bulk")
+    return url.rstrip("/").rsplit("/", 1)[0] + "/weathercam/bulk" if url else ""
+
+
 def _detect_and_set_request_delay(config: dict) -> None:
     """
     Probe the API for X-RateLimit-Limit and set request delay to 50% of limit.
@@ -627,18 +635,22 @@ def _rate_limit(config: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def fetch_airport_list(config: dict) -> list[dict]:
+def fetch_webcam_catalog(config: dict) -> list[dict]:
     """
-    Return the list of airports from the AviationWX.org public API.
+    Return airports with nested webcams from the weathercam bulk catalog.
 
-    Each item is a dict with at least ``{"code": "KSPB", ...}``.
+    Each item carries the airport summary plus a ``webcams`` list, so one
+    request replaces the separate airport list and per-airport webcams calls.
     Returns an empty list on failure.
     """
-    url = config["source"]["airports_api_url"]
+    url = _bulk_api_url(config)
+    if not url:
+        logger.error("Could not derive weathercam bulk URL from airports_api_url.")
+        return []
     timeout = config["source"]["request_timeout"]
     retries = config["source"]["max_retries"]
     delay = config["source"]["retry_delay"]
-    logger.debug("Fetching airport list from %s", url)
+    logger.debug("Fetching webcam catalog from %s", url)
 
     for attempt in range(1, retries + 1):
         _rate_limit(config)
@@ -648,23 +660,21 @@ def fetch_airport_list(config: dict) -> list[dict]:
             data = resp.json()
             # API returns {"airports": [...]} or a bare list
             if isinstance(data, list):
-                logger.debug("Fetched %d airports from API (bare list)", len(data))
+                logger.debug("Fetched %d airports from catalog (bare list)", len(data))
                 return data
             if isinstance(data, dict):
                 airports = data.get("airports", data.get("data", []))
                 if isinstance(airports, list):
-                    logger.debug(
-                        "Fetched %d airports from API (dict response)", len(airports)
-                    )
+                    logger.debug("Fetched %d airports from catalog", len(airports))
                     return airports
                 logger.debug(
-                    "Airports API returned non-list (got %s)",
+                    "Catalog returned non-list (got %s)",
                     type(airports).__name__,
                 )
                 return []
         except requests.RequestException as exc:
             logger.warning(
-                "Attempt %d/%d: failed to fetch airport list from %s: %s",
+                "Attempt %d/%d: failed to fetch webcam catalog from %s: %s",
                 attempt,
                 retries,
                 url,
@@ -681,7 +691,7 @@ def fetch_airport_list(config: dict) -> list[dict]:
         if attempt < retries:
             time.sleep(delay)
 
-    logger.error("All %d attempts to fetch airport list failed.", retries)
+    logger.error("All %d attempts to fetch webcam catalog failed.", retries)
     return []
 
 
@@ -845,7 +855,6 @@ def _fetch_webcams_api_response(airport: dict, config: dict) -> dict | None:
     Fetch full webcams API response for an airport.
 
     Returns the raw API response dict (meta, webcams, etc.) or None on failure.
-    Used by setup to write metadata.json and identify cameras.
     """
     code = _airport_code(airport)
     api_url = config["source"]["airports_api_url"]
@@ -901,26 +910,25 @@ def _fetch_webcams_list(airport: dict, config: dict) -> list[dict]:
 
 def setup_airport_archive(airport: dict, config: dict) -> list[dict] | None:
     """
-    Setup API call: fetch webcams, write metadata.json, create directory structure.
+    Write metadata.json and create the camera directory structure for an airport.
 
-    Creates output_dir/AIRPORT/metadata.json with full API response.
-    Creates output_dir/AIRPORT/YYYY/MM/DD/camera_name/ for today and each camera.
-    Returns list of webcams for use by archive run, or None on API failure.
+    Webcams come from the airport's nested ``webcams`` list (bulk catalog), so
+    no per-airport API call is made here.
+    Creates output_dir/AIRPORT/metadata.json and
+    output_dir/AIRPORT/YYYY/MM/DD/camera_name/ for today and each camera.
+    Returns the webcam list, or None when the airport has none.
     """
     code = _airport_code(airport)
     output_dir = config["archive"]["output_dir"]
     airport_root = os.path.join(output_dir, code.upper())
 
-    api_response = _fetch_webcams_api_response(airport, config)
-    webcams = []
-    if api_response is not None:
-        webcams = api_response.get("webcams", api_response.get("data", []))
-        if not isinstance(webcams, list):
-            webcams = []
+    webcams = airport.get("webcams", [])
+    if not isinstance(webcams, list):
+        webcams = []
 
     metadata = {
         "airport": airport,
-        "api_response": api_response if api_response else {},
+        "webcams": webcams,
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
     metadata_path = os.path.join(airport_root, "metadata.json")
@@ -2315,7 +2323,7 @@ def _run_archive_impl(
     # anonymous depending on key validity)
     _detect_and_set_request_delay(config)
 
-    all_airports = fetch_airport_list(config)
+    all_airports = fetch_webcam_catalog(config)
     if not all_airports:
         logger.warning("No airports returned from API; skipping run.")
         stats["errors"] += 1
