@@ -756,64 +756,6 @@ def _webcam_to_image_url(webcam: dict, config: dict) -> str | None:
     return None
 
 
-def _fetch_webcams_api_response(airport: dict, config: dict) -> dict | None:
-    """
-    Fetch full webcams API response for an airport.
-
-    Returns the raw API response dict (meta, webcams, etc.) or None on failure.
-    """
-    code = _airport_code(airport)
-    api_url = config["source"]["airports_api_url"]
-    api_base = api_url.rstrip("/").rsplit("/airports", 1)[0]
-    webcam_api = f"{api_base}/airports/{code}/webcams"
-    timeout = config["source"]["request_timeout"]
-    logger.debug("Fetching webcams from %s", webcam_api)
-
-    try:
-        _rate_limit(config)
-        resp = _http_get(
-            config, webcam_api, timeout=timeout, headers=_api_headers(config)
-        )
-        if not resp.ok:
-            logger.debug(
-                "Webcams API %s returned %s for %s",
-                webcam_api,
-                resp.status_code,
-                code,
-            )
-            return None
-        data = resp.json()
-        webcams = data.get("webcams", data.get("data", []))
-        if not isinstance(webcams, list):
-            logger.debug(
-                "Webcams API returned non-list for %s (got %s)",
-                code,
-                type(webcams).__name__,
-            )
-            return None
-        logger.debug("Webcams API returned %d webcam(s) for %s", len(webcams), code)
-        return data
-    except requests.RequestException as exc:
-        logger.debug("Webcams API request failed for %s: %s", code, exc)
-        return None
-    except json.JSONDecodeError as exc:
-        logger.debug("Webcams API invalid JSON for %s: %s", code, exc)
-        return None
-
-
-def _fetch_webcams_list(airport: dict, config: dict) -> list[dict]:
-    """
-    Fetch webcams list from API for an airport.
-
-    Returns list of webcam dicts with index, history_url, history_enabled, etc.
-    """
-    data = _fetch_webcams_api_response(airport, config)
-    if data is None:
-        return []
-    webcams = data.get("webcams", data.get("data", []))
-    return webcams if isinstance(webcams, list) else []
-
-
 def setup_airport_archive(airport: dict, config: dict) -> list[dict] | None:
     """
     Write metadata.json and create the camera directory structure for an airport.
@@ -1964,95 +1906,6 @@ def _run_archive_round_robin(
         _yield_for_web(config)
 
 
-def _run_archive_history(
-    airport: dict,
-    code: str,
-    config: dict,
-    stats: dict,
-    deadline: float | None = None,
-    webcams: list[dict] | None = None,
-) -> bool:
-    """
-    Archive using the history API: fetch all available frames, download only
-    missing ones. When run every 15 min with 60s refresh, captures ~15 new
-    images per webcam. Webcams without history fall back to current image.
-
-    If webcams is provided (from setup), uses it; otherwise fetches from API.
-    Returns True if stopped due to deadline (next run will resume from here).
-    """
-    if webcams is None:
-        webcams = _fetch_webcams_list(airport, config)
-    if not webcams:
-        logger.debug("No webcams from API for %s; falling back to current-only", code)
-        _run_archive_current_only(
-            airport, code, config, stats, datetime.now(timezone.utc)
-        )
-        return False
-
-    output_dir = config["archive"]["output_dir"]
-    existing = _get_existing_frames(output_dir, code)
-    airport_tz = _airport_timezone(airport)
-    logger.debug(
-        "Processing %s: %d webcams, %d existing frames",
-        code,
-        len(webcams),
-        len(existing),
-    )
-    run_ts = datetime.now(timezone.utc)
-
-    for webcam in webcams:
-        if deadline is not None and time.time() >= deadline:
-            return True
-        if webcam.get("history_enabled") and webcam.get("history_url"):
-            frames = fetch_history_frames(code, webcam, config)
-            cam_index = webcam.get("index", 0)
-
-            for frame in frames:
-                if deadline is not None and time.time() >= deadline:
-                    return True
-                ts = frame["timestamp"]
-                if (ts, cam_index) in existing:
-                    continue
-
-                stats["images_fetched"] += 1
-                cam_name = webcam.get("name")
-                saved = save_history_image_from_url(
-                    frame["url"],
-                    code,
-                    cam_index,
-                    ts,
-                    config,
-                    camera_name=cam_name,
-                    airport_tz=airport_tz,
-                )
-                if saved:
-                    stats["images_saved"] += 1
-                    existing.add((ts, cam_index))
-        else:
-            url = _webcam_to_image_url(webcam, config)
-            if not url:
-                logger.debug(
-                    "Skipping %s cam %s: no image_url/url/src in webcam data",
-                    code,
-                    webcam.get("index", 0),
-                )
-            elif url:
-                stats["images_fetched"] += 1
-                cam_name = webcam.get("name")
-                saved = save_image_from_url(
-                    url,
-                    code,
-                    config,
-                    timestamp=run_ts,
-                    camera_name=cam_name,
-                    airport_tz=airport_tz,
-                )
-                if saved:
-                    stats["images_saved"] += 1
-        _yield_for_web(config)
-    return False
-
-
 def _run_archive_current_only(
     airport: dict,
     code: str,
@@ -2061,10 +1914,10 @@ def _run_archive_current_only(
     run_ts: datetime,
     webcams: list[dict] | None = None,
 ) -> None:
-    """Archive using current image only (legacy behavior)."""
+    """Archive using current image only."""
     airport_tz = _airport_timezone(airport)
     if webcams is None:
-        webcams = _fetch_webcams_list(airport, config)
+        webcams = []
     if webcams:
         for webcam in webcams:
             url = _webcam_to_image_url(webcam, config)
