@@ -1194,6 +1194,21 @@ def test_bulk_api_url_preserves_scheme_host_and_query():
     )
 
 
+def test_bulk_api_url_targets_final_airports_segment():
+    """_bulk_api_url swaps the final /airports, ignoring a proxy prefix."""
+    from app.archiver import _bulk_api_url
+
+    config = {
+        "source": {
+            "airports_api_url": "https://api.example.com/airports-proxy/v1/airports"
+        }
+    }
+    assert (
+        _bulk_api_url(config)
+        == "https://api.example.com/airports-proxy/v1/weathercam/bulk"
+    )
+
+
 def test_fetch_webcam_catalog_success():
     """fetch_webcam_catalog returns airports from a successful API response."""
     from app.archiver import fetch_webcam_catalog

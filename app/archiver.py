@@ -547,8 +547,9 @@ def _bulk_api_url(config: dict) -> str:
     if not url:
         return ""
     scheme, netloc, path, query, fragment = urlsplit(url)
-    if "/airports" in path:
-        path = path.replace("/airports", "/weathercam/bulk", 1)
+    head, sep, tail = path.rpartition("/airports")
+    if sep:
+        path = f"{head}/weathercam/bulk{tail}"
     else:
         path = path.rstrip("/").rsplit("/", 1)[0] + "/weathercam/bulk"
     return urlunsplit((scheme, netloc, path, query, fragment))
