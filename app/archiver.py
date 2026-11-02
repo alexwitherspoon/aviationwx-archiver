@@ -744,100 +744,6 @@ def _airport_code(airport: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def fetch_image_urls(airport: dict, config: dict) -> list[str]:
-    """
-    Return a list of image URLs for a given airport.
-
-    Tries the public API endpoint first; falls back to scraping the airport
-    page for ``<img>`` tags that look like webcam images.
-    """
-    code = _airport_code(airport)
-    base_url = config["source"]["base_url"]
-    timeout = config["source"]["request_timeout"]
-
-    # 1. Try the API endpoint for webcam images
-    api_url = config["source"]["airports_api_url"]
-    api_base = api_url.rstrip("/").rsplit("/airports", 1)[0]
-    webcam_api = f"{api_base}/airports/{code}/webcams"
-    try:
-        _rate_limit(config)
-        resp = _http_get(
-            config, webcam_api, timeout=timeout, headers=_api_headers(config)
-        )
-        if resp.ok:
-            try:
-                data = resp.json()
-            except json.JSONDecodeError as exc:
-                logger.warning("Webcam API returned invalid JSON for %s: %s", code, exc)
-            else:
-                urls = _extract_urls_from_api(data, api_base)
-                if urls:
-                    logger.debug("Found %d image(s) for %s via API", len(urls), code)
-                    return urls
-                logger.debug(
-                    "Webcam API returned data but no image URLs for %s",
-                    code,
-                )
-        else:
-            logger.debug(
-                "Webcam API %s returned %s for %s",
-                webcam_api,
-                resp.status_code,
-                code,
-            )
-    except requests.RequestException as exc:
-        logger.debug("Webcam API request failed for %s: %s", code, exc)
-
-    # 2. Fall back: fetch the airport page and look for image tags
-    page_url = f"{base_url.rstrip('/')}/?airport={code.lower()}"
-    logger.debug("Fetching airport page %s (fallback)", page_url)
-    try:
-        _rate_limit(config)
-        resp = _http_get(
-            config, page_url, timeout=timeout, headers=_api_headers(config)
-        )
-        if resp.ok:
-            urls = _scrape_image_urls(resp.text, base_url)
-            if urls:
-                logger.debug(
-                    "Found %d image(s) for %s via page scrape", len(urls), code
-                )
-                return urls
-            logger.debug("Page scrape found 0 image URLs for %s", code)
-        else:
-            logger.debug(
-                "Airport page %s returned %s for %s",
-                page_url,
-                resp.status_code,
-                code,
-            )
-    except requests.RequestException as exc:
-        logger.warning("Failed to fetch airport page for %s: %s", code, exc)
-
-    logger.warning(
-        "No images found for %s: API (%s) and page scrape returned none. "
-        "Check source.base_url and source.airports_api_url in config.",
-        code,
-        webcam_api,
-    )
-    return []
-
-
-def _extract_urls_from_api(data: dict | list, base_url: str) -> list[str]:
-    """Extract image URLs from a webcam API response."""
-    urls = []
-    items = (
-        data if isinstance(data, list) else data.get("webcams", data.get("data", []))
-    )
-    for item in items:
-        if isinstance(item, dict):
-            for key in ("image_url", "url", "src", "snapshot_url"):
-                if key in item and isinstance(item[key], str) and item[key]:
-                    urls.append(_absolute_url(item[key], base_url))
-                    break
-    return urls
-
-
 def _webcam_to_image_url(webcam: dict, config: dict) -> str | None:
     """Convert webcam dict to full current image URL."""
     api_url = config["source"]["airports_api_url"]
@@ -1095,70 +1001,6 @@ def _get_existing_frames(output_dir: str, airport_code: str) -> set[tuple[int, i
             continue
     logger.debug("Found %d existing frames for %s", len(existing), airport_code)
     return existing
-
-
-def _scrape_image_urls(html: str, base_url: str) -> list[str]:
-    """
-    Very lightweight scraper: no external dependency, uses plain string search.
-
-    Finds src attributes on <img> tags that look like webcam snapshots.
-    """
-    urls = []
-    lower = html.lower()
-    pos = 0
-    while True:
-        start = lower.find("<img", pos)
-        if start == -1:
-            break
-        end = lower.find(">", start)
-        tag = html[start : end + 1]
-        src = _extract_attr(tag, "src")
-        if src and _looks_like_webcam(src):
-            urls.append(_absolute_url(src, base_url))
-        pos = end + 1
-    return urls
-
-
-def _extract_attr(tag: str, attr: str) -> str:
-    """Extract an attribute value from an HTML tag string."""
-    lower = tag.lower()
-    search = f"{attr}="
-    idx = lower.find(search)
-    if idx == -1:
-        return ""
-    idx += len(search)
-    if idx >= len(tag):
-        return ""
-    quote = tag[idx]
-    if quote in ('"', "'"):
-        end = tag.find(quote, idx + 1)
-        return tag[idx + 1 : end] if end != -1 else ""
-    # unquoted attribute
-    end = len(tag)
-    for ch in (" ", ">", "\t", "\n"):
-        pos = tag.find(ch, idx)
-        if pos != -1:
-            end = min(end, pos)
-    return tag[idx:end]
-
-
-def _looks_like_webcam(src: str) -> bool:
-    """Return True if the URL looks like a webcam image."""
-    lower = src.lower()
-    image_exts = (".jpg", ".jpeg", ".webp", ".png", ".gif")
-    webcam_keywords = ("webcam", "camera", "cam", "snapshot", "image", "photo")
-    has_image_ext = any(
-        lower.endswith(ext) or (ext + "?") in lower for ext in image_exts
-    )
-    has_keyword = any(kw in lower for kw in webcam_keywords)
-    return has_image_ext and has_keyword
-
-
-def _absolute_url(url: str, base_url: str) -> str:
-    """Convert a relative URL to absolute using the base URL."""
-    if url.startswith(("http://", "https://")):
-        return url
-    return urljoin(base_url, url)
 
 
 # ---------------------------------------------------------------------------
@@ -2242,16 +2084,7 @@ def _run_archive_current_only(
                 stats["images_saved"] += 1
             _yield_for_web(config)
     else:
-        image_urls = fetch_image_urls(airport, config)
-        if not image_urls:
-            logger.debug("No image URLs for %s (current-only mode)", code)
-        for url in image_urls:
-            stats["images_fetched"] += 1
-            saved = save_image_from_url(
-                url, code, config, timestamp=run_ts, airport_tz=airport_tz
-            )
-            if saved:
-                stats["images_saved"] += 1
+        logger.debug("No webcams for %s (current-only mode)", code)
 
 
 def run_archive(
@@ -2433,8 +2266,8 @@ def _run_archive_impl(
     )
     if stats["airports_processed"] > 0 and stats["images_fetched"] == 0:
         logger.warning(
-            "No images were fetched for any airport. Check source.base_url "
-            "and source.airports_api_url; set logging.level=DEBUG for details."
+            "No images were fetched for any airport. Check source.airports_api_url "
+            "and selected airports; set logging.level=DEBUG for details."
         )
     elif stats["images_fetched"] > 0 and stats["images_saved"] == 0:
         logger.warning(
