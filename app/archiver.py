@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from app.config import _CONFIG_PATH_ENV, _DEFAULT_CONFIG_PATH
 from app.constants import (
     API_LIMIT_ANONYMOUS_REQ_PER_MIN,
     BYTES_PER_GIB,
@@ -39,6 +40,8 @@ _METADATA_JSON = "metadata.json"
 _ARCHIVE_INDEX_FILENAME = ".archive_index.json"
 _ARCHIVE_INDEX_LOCK = ".archive_index.lock"
 _ARCHIVE_INDEX_VERSION = 1
+_CATALOG_PROJECTION_FILENAME = "catalog.json"
+_CATALOG_PROJECTION_VERSION = 1
 
 
 def _archive_index_path(output_dir: str) -> str:
@@ -705,6 +708,68 @@ def fetch_webcam_catalog(config: dict) -> list[dict]:
 
     logger.error("All %d attempts to fetch webcam catalog failed.", retries)
     return []
+
+
+def _catalog_projection_path(config_path: str | None = None) -> str:
+    """Path to the catalog projection, next to the active config file."""
+    path = config_path or os.environ.get(_CONFIG_PATH_ENV, _DEFAULT_CONFIG_PATH)
+    return os.path.join(os.path.dirname(path), _CATALOG_PROJECTION_FILENAME)
+
+
+def build_catalog_projection(airports: list[dict]) -> list[dict]:
+    """Return a slim airport list with the selection and display fields."""
+    rows = []
+    for airport in airports:
+        code = _airport_code(airport)
+        if not code:
+            continue
+        rows.append(
+            {
+                "id": code.upper(),
+                "name": airport.get("name") or "",
+                "country": (airport.get("country") or "").upper() or None,
+                "country_name": airport.get("country_name") or None,
+                "region": (airport.get("region") or "").upper() or None,
+                "region_name": airport.get("region_name") or None,
+            }
+        )
+    return rows
+
+
+def write_catalog_projection(
+    airports: list[dict], config_path: str | None = None
+) -> bool:
+    """Write the catalog projection atomically; returns success."""
+    path = _catalog_projection_path(config_path)
+    data = {
+        "version": _CATALOG_PROJECTION_VERSION,
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "airports": build_catalog_projection(airports),
+    }
+    tmp_path = path + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, separators=(",", ":"))
+        os.replace(tmp_path, path)
+        return True
+    except OSError:
+        return False
+
+
+def load_catalog_projection(config_path: str | None = None) -> list[dict] | None:
+    """Return the stored projection airport list, or None when invalid."""
+    path = _catalog_projection_path(config_path)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.debug("Catalog projection load failed (%s): %s", path, exc)
+        return None
+    if not isinstance(data, dict) or data.get("version") != _CATALOG_PROJECTION_VERSION:
+        return None
+    airports = data.get("airports")
+    return airports if isinstance(airports, list) else None
 
 
 def select_airports(all_airports: list[dict], config: dict) -> list[dict]:
@@ -2059,6 +2124,8 @@ def _run_archive_impl(
         logger.warning("No airports returned from API; skipping run.")
         stats["errors"] += 1
         return stats
+
+    write_catalog_projection(all_airports)
 
     airports = select_airports(all_airports, config)
     logger.info("Archiving %d airport(s).", len(airports))

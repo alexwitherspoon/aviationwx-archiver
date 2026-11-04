@@ -1307,6 +1307,71 @@ def test_bulk_api_url_targets_final_airports_segment():
     )
 
 
+def test_catalog_projection_path_lives_next_to_config():
+    """Projection path is derived from the active config file's directory."""
+    from app.archiver import _catalog_projection_path
+
+    assert _catalog_projection_path("/config/config.yaml").endswith(
+        "/config/catalog.json"
+    )
+
+
+def test_build_catalog_projection_selects_fields():
+    """Projection keeps id, name, country, and region, uppercasing codes."""
+    from app.archiver import build_catalog_projection
+
+    airports = [
+        {
+            "id": "kspb",
+            "name": "Scappoose",
+            "country": "us",
+            "country_name": "United States",
+            "region": "us-or",
+            "region_name": "Oregon",
+            "webcams": [{"index": 0}],  # dropped
+        },
+    ]
+    assert build_catalog_projection(airports) == [
+        {
+            "id": "KSPB",
+            "name": "Scappoose",
+            "country": "US",
+            "country_name": "United States",
+            "region": "US-OR",
+            "region_name": "Oregon",
+        }
+    ]
+
+
+def test_write_and_load_catalog_projection_roundtrip():
+    """A written projection loads back with the same airports."""
+    from app.archiver import load_catalog_projection, write_catalog_projection
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = os.path.join(tmpdir, "config.yaml")
+        airports = [
+            {"id": "kspb", "name": "Scappoose", "country": "US", "region": "US-OR"}
+        ]
+        assert write_catalog_projection(airports, config_path=config_path) is True
+        assert load_catalog_projection(config_path=config_path) == [
+            {
+                "id": "KSPB",
+                "name": "Scappoose",
+                "country": "US",
+                "country_name": None,
+                "region": "US-OR",
+                "region_name": None,
+            }
+        ]
+
+
+def test_load_catalog_projection_returns_none_when_missing():
+    """Missing projection file returns None."""
+    from app.archiver import load_catalog_projection
+
+    assert load_catalog_projection(config_path="/nonexistent/dir/config.yaml") is None
+
+
 def test_fetch_webcam_catalog_success():
     """fetch_webcam_catalog returns airports from a successful API response."""
     from app.archiver import fetch_webcam_catalog
