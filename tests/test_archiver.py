@@ -181,6 +181,30 @@ def test_validate_config_valid_with_selected():
     assert validate_config(config) == []
 
 
+def test_validate_config_valid_with_regions():
+    """Config is valid when a region is selected without codes or archive_all."""
+    from app.config import validate_config
+
+    config = {
+        "archive": {"output_dir": "/archive", "retention_days": 0},
+        "airports": {"archive_all": False, "selected": [], "regions": ["US-OR"]},
+        "source": {"airports_api_url": "https://api.example.com/airports"},
+    }
+    assert validate_config(config) == []
+
+
+def test_validate_config_valid_with_countries():
+    """Config is valid when a country is selected without codes or archive_all."""
+    from app.config import validate_config
+
+    config = {
+        "archive": {"output_dir": "/archive", "retention_days": 0},
+        "airports": {"archive_all": False, "selected": [], "countries": ["US"]},
+        "source": {"airports_api_url": "https://api.example.com/airports"},
+    }
+    assert validate_config(config) == []
+
+
 def test_check_host_resources_warns_when_output_dir_missing():
     """check_host_resources logs warning when output_dir does not exist."""
     from app.config import check_host_resources
@@ -432,6 +456,68 @@ def test_select_airports_uses_icao_when_no_code_or_id():
 
     result = select_airports(all_airports, config)
     assert len(result) == 1
+
+
+def test_select_airports_by_region():
+    """Airports matching a selected region are kept, others dropped."""
+    from app.archiver import select_airports
+
+    all_airports = [
+        {"code": "KSPB", "region": "US-OR", "country": "US"},
+        {"code": "KBOI", "region": "US-ID", "country": "US"},
+    ]
+    config = {"airports": {"archive_all": False, "selected": [], "regions": ["US-ID"]}}
+
+    result = select_airports(all_airports, config)
+    assert [a["code"] for a in result] == ["KBOI"]
+
+
+def test_select_airports_by_country():
+    """Airports matching a selected country are kept, case-insensitively."""
+    from app.archiver import select_airports
+
+    all_airports = [
+        {"code": "KSPB", "region": "US-OR", "country": "US"},
+        {"code": "CYVR", "region": "CA-BC", "country": "CA"},
+    ]
+    config = {"airports": {"archive_all": False, "selected": [], "countries": ["ca"]}}
+
+    result = select_airports(all_airports, config)
+    assert [a["code"] for a in result] == ["CYVR"]
+
+
+def test_select_airports_unions_codes_regions_and_countries():
+    """Codes, regions, and countries OR together into one set."""
+    from app.archiver import select_airports
+
+    all_airports = [
+        {"code": "KSPB", "region": "US-OR", "country": "US"},
+        {"code": "KBOI", "region": "US-ID", "country": "US"},
+        {"code": "KPWT", "region": "US-WA", "country": "US"},
+        {"code": "CYVR", "region": "CA-BC", "country": "CA"},
+    ]
+    config = {
+        "airports": {
+            "archive_all": False,
+            "selected": ["KSPB"],
+            "regions": ["US-ID"],
+            "countries": ["CA"],
+        }
+    }
+
+    result = select_airports(all_airports, config)
+    assert {a["code"] for a in result} == {"KSPB", "KBOI", "CYVR"}
+
+
+def test_select_airports_ignores_airports_without_region_or_country():
+    """An airport without region/country only matches by code, not by region."""
+    from app.archiver import select_airports
+
+    all_airports = [{"code": "KSPB"}]
+    config = {"airports": {"archive_all": False, "selected": [], "regions": ["US-OR"]}}
+
+    result = select_airports(all_airports, config)
+    assert result == []
 
 
 # ---------------------------------------------------------------------------

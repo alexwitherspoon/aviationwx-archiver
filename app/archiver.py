@@ -711,30 +711,63 @@ def select_airports(all_airports: list[dict], config: dict) -> list[dict]:
     """
     Filter the full airport list according to configuration.
 
-    When ``airports.archive_all`` is True every airport is returned.
-    Otherwise only airports whose code appears in ``airports.selected`` are kept.
+    When ``airports.archive_all`` is True every airport is returned. Otherwise an
+    airport is kept when its code, region, or country matches any entry in
+    ``airports.selected``, ``airports.regions``, or ``airports.countries``.
+    Matching is case-insensitive; an airport without a region or country simply
+    does not match a region or country selection.
     """
-    if config["airports"].get("archive_all", False):
+    airports_cfg = config.get("airports", {})
+    if airports_cfg.get("archive_all", False):
         logger.debug(
             "Selected all %d airports (archive_all=true)",
             len(all_airports),
         )
         return all_airports
 
-    selected_codes = {c.upper() for c in config["airports"].get("selected", [])}
-    if not selected_codes:
+    selected_codes = {c.upper() for c in airports_cfg.get("selected", [])}
+    selected_regions = {r.upper() for r in airports_cfg.get("regions", [])}
+    selected_countries = {c.upper() for c in airports_cfg.get("countries", [])}
+    if not selected_codes and not selected_regions and not selected_countries:
         logger.warning(
             "No airports selected and archive_all is false; nothing to archive."
         )
         return []
 
-    filtered = [a for a in all_airports if _airport_code(a).upper() in selected_codes]
+    filtered = []
+    for airport in all_airports:
+        code = _airport_code(airport).upper()
+        region = (airport.get("region") or "").upper()
+        country = (airport.get("country") or "").upper()
+        if (
+            code in selected_codes
+            or (region and region in selected_regions)
+            or (country and country in selected_countries)
+        ):
+            filtered.append(airport)
+
     found_codes = {_airport_code(a).upper() for a in filtered}
     missing = selected_codes - found_codes
     if missing:
         logger.warning(
             "Selected airports not found in API: %s",
             ", ".join(sorted(missing)),
+        )
+
+    found_regions = {(a.get("region") or "").upper() for a in filtered}
+    missing_regions = selected_regions - found_regions
+    if missing_regions:
+        logger.warning(
+            "Selected regions not found in API: %s",
+            ", ".join(sorted(missing_regions)),
+        )
+
+    found_countries = {(a.get("country") or "").upper() for a in filtered}
+    missing_countries = selected_countries - found_countries
+    if missing_countries:
+        logger.warning(
+            "Selected countries not found in API: %s",
+            ", ".join(sorted(missing_countries)),
         )
 
     logger.debug(
