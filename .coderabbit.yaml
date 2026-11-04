@@ -18,12 +18,10 @@ reviews:
   collapse_walkthrough: true
   abort_on_close: true
 
+  # Draft PRs are the only hold. Everything else gets reviewed.
   auto_review:
     enabled: true
     drafts: false
-    ignore_title_keywords:
-      - "WIP"
-      - "DO NOT MERGE"
 
   auto_approvals:
     enabled: false
@@ -56,6 +54,8 @@ reviews:
     zizmor: { enabled: true }
     gitleaks: { enabled: true }
     # Disabled: redundancy or no matching config in this repo.
+    ast-grep: { enabled: false }
+    checkmake: { enabled: false }
     flake8: { enabled: false }
     pylint: { enabled: false }
     semgrep: { enabled: false }
@@ -93,7 +93,5 @@ knowledge_base:
   code_guidelines:
     # Review rules are pointed at, not restated.
     filePatterns:
-      - "**/CODE_STYLE.md"
-      - "**/CONTRIBUTING.md"
-      - ".github/copilot-instructions.md"
-      - "REGION_SELECTION_SPEC.md"
+      - files: "CODE_STYLE.md,CONTRIBUTING.md,.github/copilot-instructions.md,REGION_SELECTION_SPEC.md"
+        applyTo: "**"
