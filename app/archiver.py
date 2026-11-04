@@ -18,7 +18,7 @@ import random
 import re
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 import requests
@@ -536,9 +536,29 @@ def _api_headers(config: dict) -> dict:
 def _status_url(config: dict) -> str:
     """Derive /v1/status URL from airports_api_url."""
     url = config.get("source", {}).get("airports_api_url", "")
-    if "/airports" in url:
-        return url.replace("/airports", "/status")
-    return url.rstrip("/").rsplit("/", 1)[0] + "/status" if url else ""
+    if not url:
+        return ""
+    scheme, netloc, path, query, fragment = urlsplit(url)
+    head, sep, tail = path.rpartition("/airports")
+    if sep:
+        path = f"{head}/status{tail}"
+    else:
+        path = path.rstrip("/").rsplit("/", 1)[0] + "/status"
+    return urlunsplit((scheme, netloc, path, query, fragment))
+
+
+def _bulk_api_url(config: dict) -> str:
+    """Derive /v1/weathercam/bulk URL from airports_api_url."""
+    url = config.get("source", {}).get("airports_api_url", "")
+    if not url:
+        return ""
+    scheme, netloc, path, query, fragment = urlsplit(url)
+    head, sep, tail = path.rpartition("/airports")
+    if sep:
+        path = f"{head}/weathercam/bulk{tail}"
+    else:
+        path = path.rstrip("/").rsplit("/", 1)[0] + "/weathercam/bulk"
+    return urlunsplit((scheme, netloc, path, query, fragment))
 
 
 def _detect_and_set_request_delay(config: dict) -> None:
@@ -627,18 +647,22 @@ def _rate_limit(config: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def fetch_airport_list(config: dict) -> list[dict]:
+def fetch_webcam_catalog(config: dict) -> list[dict]:
     """
-    Return the list of airports from the AviationWX.org public API.
+    Return airports with nested webcams from the weathercam bulk catalog.
 
-    Each item is a dict with at least ``{"code": "KSPB", ...}``.
+    Each item carries the airport summary plus a ``webcams`` list, so one
+    request replaces the separate airport list and per-airport webcams calls.
     Returns an empty list on failure.
     """
-    url = config["source"]["airports_api_url"]
+    url = _bulk_api_url(config)
+    if not url:
+        logger.error("Could not derive weathercam bulk URL from airports_api_url.")
+        return []
     timeout = config["source"]["request_timeout"]
     retries = config["source"]["max_retries"]
     delay = config["source"]["retry_delay"]
-    logger.debug("Fetching airport list from %s", url)
+    logger.debug("Fetching webcam catalog from %s", url)
 
     for attempt in range(1, retries + 1):
         _rate_limit(config)
@@ -648,23 +672,21 @@ def fetch_airport_list(config: dict) -> list[dict]:
             data = resp.json()
             # API returns {"airports": [...]} or a bare list
             if isinstance(data, list):
-                logger.debug("Fetched %d airports from API (bare list)", len(data))
+                logger.debug("Fetched %d airports from catalog (bare list)", len(data))
                 return data
             if isinstance(data, dict):
                 airports = data.get("airports", data.get("data", []))
                 if isinstance(airports, list):
-                    logger.debug(
-                        "Fetched %d airports from API (dict response)", len(airports)
-                    )
+                    logger.debug("Fetched %d airports from catalog", len(airports))
                     return airports
                 logger.debug(
-                    "Airports API returned non-list (got %s)",
+                    "Catalog returned non-list (got %s)",
                     type(airports).__name__,
                 )
                 return []
         except requests.RequestException as exc:
             logger.warning(
-                "Attempt %d/%d: failed to fetch airport list from %s: %s",
+                "Attempt %d/%d: failed to fetch webcam catalog from %s: %s",
                 attempt,
                 retries,
                 url,
@@ -681,7 +703,7 @@ def fetch_airport_list(config: dict) -> list[dict]:
         if attempt < retries:
             time.sleep(delay)
 
-    logger.error("All %d attempts to fetch airport list failed.", retries)
+    logger.error("All %d attempts to fetch webcam catalog failed.", retries)
     return []
 
 
@@ -734,100 +756,6 @@ def _airport_code(airport: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def fetch_image_urls(airport: dict, config: dict) -> list[str]:
-    """
-    Return a list of image URLs for a given airport.
-
-    Tries the public API endpoint first; falls back to scraping the airport
-    page for ``<img>`` tags that look like webcam images.
-    """
-    code = _airport_code(airport)
-    base_url = config["source"]["base_url"]
-    timeout = config["source"]["request_timeout"]
-
-    # 1. Try the API endpoint for webcam images
-    api_url = config["source"]["airports_api_url"]
-    api_base = api_url.rstrip("/").rsplit("/airports", 1)[0]
-    webcam_api = f"{api_base}/airports/{code}/webcams"
-    try:
-        _rate_limit(config)
-        resp = _http_get(
-            config, webcam_api, timeout=timeout, headers=_api_headers(config)
-        )
-        if resp.ok:
-            try:
-                data = resp.json()
-            except json.JSONDecodeError as exc:
-                logger.warning("Webcam API returned invalid JSON for %s: %s", code, exc)
-            else:
-                urls = _extract_urls_from_api(data, api_base)
-                if urls:
-                    logger.debug("Found %d image(s) for %s via API", len(urls), code)
-                    return urls
-                logger.debug(
-                    "Webcam API returned data but no image URLs for %s",
-                    code,
-                )
-        else:
-            logger.debug(
-                "Webcam API %s returned %s for %s",
-                webcam_api,
-                resp.status_code,
-                code,
-            )
-    except requests.RequestException as exc:
-        logger.debug("Webcam API request failed for %s: %s", code, exc)
-
-    # 2. Fall back: fetch the airport page and look for image tags
-    page_url = f"{base_url.rstrip('/')}/?airport={code.lower()}"
-    logger.debug("Fetching airport page %s (fallback)", page_url)
-    try:
-        _rate_limit(config)
-        resp = _http_get(
-            config, page_url, timeout=timeout, headers=_api_headers(config)
-        )
-        if resp.ok:
-            urls = _scrape_image_urls(resp.text, base_url)
-            if urls:
-                logger.debug(
-                    "Found %d image(s) for %s via page scrape", len(urls), code
-                )
-                return urls
-            logger.debug("Page scrape found 0 image URLs for %s", code)
-        else:
-            logger.debug(
-                "Airport page %s returned %s for %s",
-                page_url,
-                resp.status_code,
-                code,
-            )
-    except requests.RequestException as exc:
-        logger.warning("Failed to fetch airport page for %s: %s", code, exc)
-
-    logger.warning(
-        "No images found for %s: API (%s) and page scrape returned none. "
-        "Check source.base_url and source.airports_api_url in config.",
-        code,
-        webcam_api,
-    )
-    return []
-
-
-def _extract_urls_from_api(data: dict | list, base_url: str) -> list[str]:
-    """Extract image URLs from a webcam API response."""
-    urls = []
-    items = (
-        data if isinstance(data, list) else data.get("webcams", data.get("data", []))
-    )
-    for item in items:
-        if isinstance(item, dict):
-            for key in ("image_url", "url", "src", "snapshot_url"):
-                if key in item and isinstance(item[key], str) and item[key]:
-                    urls.append(_absolute_url(item[key], base_url))
-                    break
-    return urls
-
-
 def _webcam_to_image_url(webcam: dict, config: dict) -> str | None:
     """Convert webcam dict to full current image URL."""
     api_url = config["source"]["airports_api_url"]
@@ -840,87 +768,27 @@ def _webcam_to_image_url(webcam: dict, config: dict) -> str | None:
     return None
 
 
-def _fetch_webcams_api_response(airport: dict, config: dict) -> dict | None:
-    """
-    Fetch full webcams API response for an airport.
-
-    Returns the raw API response dict (meta, webcams, etc.) or None on failure.
-    Used by setup to write metadata.json and identify cameras.
-    """
-    code = _airport_code(airport)
-    api_url = config["source"]["airports_api_url"]
-    api_base = api_url.rstrip("/").rsplit("/airports", 1)[0]
-    webcam_api = f"{api_base}/airports/{code}/webcams"
-    timeout = config["source"]["request_timeout"]
-    logger.debug("Fetching webcams from %s", webcam_api)
-
-    try:
-        _rate_limit(config)
-        resp = _http_get(
-            config, webcam_api, timeout=timeout, headers=_api_headers(config)
-        )
-        if not resp.ok:
-            logger.debug(
-                "Webcams API %s returned %s for %s",
-                webcam_api,
-                resp.status_code,
-                code,
-            )
-            return None
-        data = resp.json()
-        webcams = data.get("webcams", data.get("data", []))
-        if not isinstance(webcams, list):
-            logger.debug(
-                "Webcams API returned non-list for %s (got %s)",
-                code,
-                type(webcams).__name__,
-            )
-            return None
-        logger.debug("Webcams API returned %d webcam(s) for %s", len(webcams), code)
-        return data
-    except requests.RequestException as exc:
-        logger.debug("Webcams API request failed for %s: %s", code, exc)
-        return None
-    except json.JSONDecodeError as exc:
-        logger.debug("Webcams API invalid JSON for %s: %s", code, exc)
-        return None
-
-
-def _fetch_webcams_list(airport: dict, config: dict) -> list[dict]:
-    """
-    Fetch webcams list from API for an airport.
-
-    Returns list of webcam dicts with index, history_url, history_enabled, etc.
-    """
-    data = _fetch_webcams_api_response(airport, config)
-    if data is None:
-        return []
-    webcams = data.get("webcams", data.get("data", []))
-    return webcams if isinstance(webcams, list) else []
-
-
 def setup_airport_archive(airport: dict, config: dict) -> list[dict] | None:
     """
-    Setup API call: fetch webcams, write metadata.json, create directory structure.
+    Write metadata.json and create the camera directory structure for an airport.
 
-    Creates output_dir/AIRPORT/metadata.json with full API response.
-    Creates output_dir/AIRPORT/YYYY/MM/DD/camera_name/ for today and each camera.
-    Returns list of webcams for use by archive run, or None on API failure.
+    Webcams come from the airport's nested ``webcams`` list (bulk catalog), so
+    no per-airport API call is made here.
+    Creates output_dir/AIRPORT/metadata.json and
+    output_dir/AIRPORT/YYYY/MM/DD/camera_name/ for today and each camera.
+    Returns the webcam list, or None when the airport has none.
     """
     code = _airport_code(airport)
     output_dir = config["archive"]["output_dir"]
     airport_root = os.path.join(output_dir, code.upper())
 
-    api_response = _fetch_webcams_api_response(airport, config)
-    webcams = []
-    if api_response is not None:
-        webcams = api_response.get("webcams", api_response.get("data", []))
-        if not isinstance(webcams, list):
-            webcams = []
+    webcams = airport.get("webcams", [])
+    if not isinstance(webcams, list):
+        webcams = []
 
     metadata = {
         "airport": airport,
-        "api_response": api_response if api_response else {},
+        "webcams": webcams,
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
     metadata_path = os.path.join(airport_root, "metadata.json")
@@ -1087,70 +955,6 @@ def _get_existing_frames(output_dir: str, airport_code: str) -> set[tuple[int, i
             continue
     logger.debug("Found %d existing frames for %s", len(existing), airport_code)
     return existing
-
-
-def _scrape_image_urls(html: str, base_url: str) -> list[str]:
-    """
-    Very lightweight scraper: no external dependency, uses plain string search.
-
-    Finds src attributes on <img> tags that look like webcam snapshots.
-    """
-    urls = []
-    lower = html.lower()
-    pos = 0
-    while True:
-        start = lower.find("<img", pos)
-        if start == -1:
-            break
-        end = lower.find(">", start)
-        tag = html[start : end + 1]
-        src = _extract_attr(tag, "src")
-        if src and _looks_like_webcam(src):
-            urls.append(_absolute_url(src, base_url))
-        pos = end + 1
-    return urls
-
-
-def _extract_attr(tag: str, attr: str) -> str:
-    """Extract an attribute value from an HTML tag string."""
-    lower = tag.lower()
-    search = f"{attr}="
-    idx = lower.find(search)
-    if idx == -1:
-        return ""
-    idx += len(search)
-    if idx >= len(tag):
-        return ""
-    quote = tag[idx]
-    if quote in ('"', "'"):
-        end = tag.find(quote, idx + 1)
-        return tag[idx + 1 : end] if end != -1 else ""
-    # unquoted attribute
-    end = len(tag)
-    for ch in (" ", ">", "\t", "\n"):
-        pos = tag.find(ch, idx)
-        if pos != -1:
-            end = min(end, pos)
-    return tag[idx:end]
-
-
-def _looks_like_webcam(src: str) -> bool:
-    """Return True if the URL looks like a webcam image."""
-    lower = src.lower()
-    image_exts = (".jpg", ".jpeg", ".webp", ".png", ".gif")
-    webcam_keywords = ("webcam", "camera", "cam", "snapshot", "image", "photo")
-    has_image_ext = any(
-        lower.endswith(ext) or (ext + "?") in lower for ext in image_exts
-    )
-    has_keyword = any(kw in lower for kw in webcam_keywords)
-    return has_image_ext and has_keyword
-
-
-def _absolute_url(url: str, base_url: str) -> str:
-    """Convert a relative URL to absolute using the base URL."""
-    if url.startswith(("http://", "https://")):
-        return url
-    return urljoin(base_url, url)
 
 
 # ---------------------------------------------------------------------------
@@ -2114,95 +1918,6 @@ def _run_archive_round_robin(
         _yield_for_web(config)
 
 
-def _run_archive_history(
-    airport: dict,
-    code: str,
-    config: dict,
-    stats: dict,
-    deadline: float | None = None,
-    webcams: list[dict] | None = None,
-) -> bool:
-    """
-    Archive using the history API: fetch all available frames, download only
-    missing ones. When run every 15 min with 60s refresh, captures ~15 new
-    images per webcam. Webcams without history fall back to current image.
-
-    If webcams is provided (from setup), uses it; otherwise fetches from API.
-    Returns True if stopped due to deadline (next run will resume from here).
-    """
-    if webcams is None:
-        webcams = _fetch_webcams_list(airport, config)
-    if not webcams:
-        logger.debug("No webcams from API for %s; falling back to current-only", code)
-        _run_archive_current_only(
-            airport, code, config, stats, datetime.now(timezone.utc)
-        )
-        return False
-
-    output_dir = config["archive"]["output_dir"]
-    existing = _get_existing_frames(output_dir, code)
-    airport_tz = _airport_timezone(airport)
-    logger.debug(
-        "Processing %s: %d webcams, %d existing frames",
-        code,
-        len(webcams),
-        len(existing),
-    )
-    run_ts = datetime.now(timezone.utc)
-
-    for webcam in webcams:
-        if deadline is not None and time.time() >= deadline:
-            return True
-        if webcam.get("history_enabled") and webcam.get("history_url"):
-            frames = fetch_history_frames(code, webcam, config)
-            cam_index = webcam.get("index", 0)
-
-            for frame in frames:
-                if deadline is not None and time.time() >= deadline:
-                    return True
-                ts = frame["timestamp"]
-                if (ts, cam_index) in existing:
-                    continue
-
-                stats["images_fetched"] += 1
-                cam_name = webcam.get("name")
-                saved = save_history_image_from_url(
-                    frame["url"],
-                    code,
-                    cam_index,
-                    ts,
-                    config,
-                    camera_name=cam_name,
-                    airport_tz=airport_tz,
-                )
-                if saved:
-                    stats["images_saved"] += 1
-                    existing.add((ts, cam_index))
-        else:
-            url = _webcam_to_image_url(webcam, config)
-            if not url:
-                logger.debug(
-                    "Skipping %s cam %s: no image_url/url/src in webcam data",
-                    code,
-                    webcam.get("index", 0),
-                )
-            elif url:
-                stats["images_fetched"] += 1
-                cam_name = webcam.get("name")
-                saved = save_image_from_url(
-                    url,
-                    code,
-                    config,
-                    timestamp=run_ts,
-                    camera_name=cam_name,
-                    airport_tz=airport_tz,
-                )
-                if saved:
-                    stats["images_saved"] += 1
-        _yield_for_web(config)
-    return False
-
-
 def _run_archive_current_only(
     airport: dict,
     code: str,
@@ -2211,10 +1926,10 @@ def _run_archive_current_only(
     run_ts: datetime,
     webcams: list[dict] | None = None,
 ) -> None:
-    """Archive using current image only (legacy behavior)."""
+    """Archive using current image only."""
     airport_tz = _airport_timezone(airport)
     if webcams is None:
-        webcams = _fetch_webcams_list(airport, config)
+        webcams = []
     if webcams:
         for webcam in webcams:
             url = _webcam_to_image_url(webcam, config)
@@ -2234,16 +1949,7 @@ def _run_archive_current_only(
                 stats["images_saved"] += 1
             _yield_for_web(config)
     else:
-        image_urls = fetch_image_urls(airport, config)
-        if not image_urls:
-            logger.debug("No image URLs for %s (current-only mode)", code)
-        for url in image_urls:
-            stats["images_fetched"] += 1
-            saved = save_image_from_url(
-                url, code, config, timestamp=run_ts, airport_tz=airport_tz
-            )
-            if saved:
-                stats["images_saved"] += 1
+        logger.debug("No webcams for %s (current-only mode)", code)
 
 
 def run_archive(
@@ -2315,7 +2021,7 @@ def _run_archive_impl(
     # anonymous depending on key validity)
     _detect_and_set_request_delay(config)
 
-    all_airports = fetch_airport_list(config)
+    all_airports = fetch_webcam_catalog(config)
     if not all_airports:
         logger.warning("No airports returned from API; skipping run.")
         stats["errors"] += 1
@@ -2425,8 +2131,8 @@ def _run_archive_impl(
     )
     if stats["airports_processed"] > 0 and stats["images_fetched"] == 0:
         logger.warning(
-            "No images were fetched for any airport. Check source.base_url "
-            "and source.airports_api_url; set logging.level=DEBUG for details."
+            "No images were fetched for any airport. Check source.airports_api_url "
+            "and selected airports; set logging.level=DEBUG for details."
         )
     elif stats["images_fetched"] > 0 and stats["images_saved"] == 0:
         logger.warning(

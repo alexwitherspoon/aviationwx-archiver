@@ -105,7 +105,7 @@
     <div id="selected-block" {% if config.airports.archive_all %}style="display:none"{% endif %}>
       <label for="selected_airports">Airport codes to archive (one per line, or comma-separated): required if not archiving all</label>
       <textarea id="selected_airports" name="selected_airports" rows="6"
-                placeholder="KSPB&#10;KAWO&#10;KPWT">{{ config.airports.selected | join('\n') }}</textarea>
+                placeholder="KSPB&#10;KHIO&#10;KBOI">{{ config.airports.selected | join('\n') }}</textarea>
     </div>
   </div>
 
@@ -113,12 +113,6 @@
   <div class="card">
     <h2>Source <span class="field-hint">(optional)</span></h2>
     <div class="grid-3">
-      <div>
-        <label for="base_url">AviationWX.org base URL</label>
-        <input type="url" id="base_url" name="base_url"
-               value="{{ config.source.base_url }}"
-               placeholder="https://aviationwx.org">
-      </div>
       <div>
         <label for="api_key">Partner API key</label>
         <input type="password" id="api_key" name="api_key" autocomplete="off"

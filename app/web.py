@@ -912,10 +912,6 @@ def _form_to_config(form, existing_config: dict) -> dict:
     config["airports"]["selected"] = selected
 
     # Source
-    base_url = form.get("base_url", "").strip()
-    if base_url:
-        config["source"]["base_url"] = base_url
-
     api_key = form.get("api_key", "").strip()
     if api_key:
         config["source"]["api_key"] = api_key

@@ -46,7 +46,6 @@ DEFAULT_CONFIG = {
         "retention_minute": 0,
     },
     "source": {
-        "base_url": "https://aviationwx.org",
         "airports_api_url": "https://api.aviationwx.org/v1/airports",
         "api_key": "",
         "request_timeout": 30,
@@ -107,7 +106,6 @@ _ENV_TO_CONFIG: list[tuple[str, tuple[str, ...], str | type]] = [
     ),
     ("ARCHIVER_SCHEDULE_RETENTION_HOUR", ("schedule", "retention_hour"), int),
     ("ARCHIVER_SCHEDULE_RETENTION_MINUTE", ("schedule", "retention_minute"), int),
-    ("ARCHIVER_SOURCE_BASE_URL", ("source", "base_url"), str),
     ("ARCHIVER_SOURCE_AIRPORTS_API_URL", ("source", "airports_api_url"), str),
     ("ARCHIVER_SOURCE_API_KEY", ("source", "api_key"), str),
     ("ARCHIVER_SOURCE_REQUEST_TIMEOUT", ("source", "request_timeout"), int),
@@ -311,7 +309,7 @@ def validate_config(config: dict) -> list[str]:
     if not archive_all and not selected:
         errors.append(
             "Select at least one airport: enable 'Archive all airports' or add "
-            "airport codes (e.g. KSPB, KAWO) to the selected list."
+            "airport codes (e.g. KSPB, KHIO) to the selected list."
         )
 
     output_dir = (config.get("archive", {}).get("output_dir") or "").strip()

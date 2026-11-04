@@ -439,186 +439,6 @@ def test_select_airports_uses_icao_when_no_code_or_id():
 # ---------------------------------------------------------------------------
 
 
-def test_absolute_url_already_absolute():
-    from app.archiver import _absolute_url
-
-    url = "https://example.com/img/cam.jpg"
-    assert _absolute_url(url, "https://aviationwx.org") == url
-
-
-def test_absolute_url_relative():
-    from app.archiver import _absolute_url
-
-    url = "/webcam/kspb/cam.jpg"
-    result = _absolute_url(url, "https://aviationwx.org")
-    assert result == "https://aviationwx.org/webcam/kspb/cam.jpg"
-
-
-def test_looks_like_webcam_true():
-    from app.archiver import _looks_like_webcam
-
-    assert _looks_like_webcam("/cams/kspb/webcam.jpg") is True
-    assert _looks_like_webcam("/snapshot/camera.webp") is True
-
-
-def test_looks_like_webcam_false():
-    from app.archiver import _looks_like_webcam
-
-    assert _looks_like_webcam("/logo.png") is False
-    assert _looks_like_webcam("/styles.css") is False
-    assert _looks_like_webcam("/api/data.json") is False
-
-
-def test_looks_like_webcam_url_with_query_string():
-    """URLs with query params (e.g. image.jpg?t=123) are accepted."""
-    from app.archiver import _looks_like_webcam
-
-    assert _looks_like_webcam("/cams/webcam.jpg?token=abc") is True
-
-
-def test_scrape_image_urls_finds_webcam():
-    from app.archiver import _scrape_image_urls
-
-    html = """<html>
-    <img src="/cams/kspb/webcam.jpg" alt="webcam">
-    <img src="/logo.png" alt="logo">
-    <img src="/snapshot/camera.webp" alt="camera">
-    </html>"""
-
-    urls = _scrape_image_urls(html, "https://aviationwx.org")
-    assert any("webcam.jpg" in u for u in urls)
-    assert any("camera.webp" in u for u in urls)
-    # logo.png should be excluded
-    assert not any("logo.png" in u for u in urls)
-
-
-def test_scrape_image_urls_empty_html_returns_empty():
-    from app.archiver import _scrape_image_urls
-
-    assert _scrape_image_urls("", "https://example.com") == []
-    html_no_imgs = "<html><body>No images</body></html>"
-    assert _scrape_image_urls(html_no_imgs, "https://x.com") == []
-
-
-def test_scrape_image_urls_ignores_img_without_matching_src():
-    """Img tags without webcam-like src are skipped."""
-    from app.archiver import _scrape_image_urls
-
-    html = '<html><img src="/logo.png"><img src="/banner.gif"></html>'
-    urls = _scrape_image_urls(html, "https://example.com")
-    assert urls == []
-
-
-def test_extract_attr_double_quoted():
-    from app.archiver import _extract_attr
-
-    tag = '<img src="/path/to/img.jpg" alt="test">'
-    assert _extract_attr(tag, "src") == "/path/to/img.jpg"
-
-
-def test_extract_attr_single_quoted():
-    from app.archiver import _extract_attr
-
-    tag = "<img src='/path/img.jpg'>"
-    assert _extract_attr(tag, "src") == "/path/img.jpg"
-
-
-def test_extract_attr_missing():
-    from app.archiver import _extract_attr
-
-    tag = '<img alt="test">'
-    assert _extract_attr(tag, "src") == ""
-
-
-def test_extract_attr_unquoted_value():
-    """Unquoted attribute values are extracted."""
-    from app.archiver import _extract_attr
-
-    tag = "<img src=/path/cam.jpg alt=test>"
-    assert _extract_attr(tag, "src") == "/path/cam.jpg"
-
-
-def test_extract_urls_from_api_uses_api_base_for_relative_paths():
-    """API-returned relative image URLs must be resolved against API host."""
-    from app.archiver import _extract_urls_from_api
-
-    data = {
-        "webcams": [
-            {"image_url": "/v1/airports/kspb/webcams/0/image"},
-        ],
-    }
-    urls = _extract_urls_from_api(data, "https://api.aviationwx.org/v1")
-    assert len(urls) == 1
-    assert urls[0] == "https://api.aviationwx.org/v1/airports/kspb/webcams/0/image"
-
-
-def test_extract_urls_from_api_prefers_image_url_over_other_keys():
-    """First matching key in (image_url, url, src, snapshot_url) is used."""
-    from app.archiver import _extract_urls_from_api
-
-    data = {
-        "webcams": [
-            {
-                "image_url": "/img1.jpg",
-                "url": "/img2.jpg",
-                "src": "/img3.jpg",
-            },
-        ],
-    }
-    urls = _extract_urls_from_api(data, "https://api.example.com")
-    assert len(urls) == 1
-    assert "img1.jpg" in urls[0]
-
-
-def test_extract_urls_from_api_handles_list_format():
-    """API can return a bare list of webcam items."""
-    from app.archiver import _extract_urls_from_api
-
-    data = [{"image_url": "/cam/0/image"}, {"url": "https://example.com/cam.jpg"}]
-    urls = _extract_urls_from_api(data, "https://api.example.com")
-    assert len(urls) == 2
-    assert "api.example.com" in urls[0]
-    assert urls[1] == "https://example.com/cam.jpg"
-
-
-def test_extract_urls_from_api_handles_empty_response():
-    """Empty or missing webcams returns empty list."""
-    from app.archiver import _extract_urls_from_api
-
-    assert _extract_urls_from_api({}, "https://api.example.com") == []
-    assert _extract_urls_from_api({"webcams": []}, "https://api.example.com") == []
-
-
-def test_fetch_image_urls_webcam_api_url_no_double_v1():
-    """Webcam API URL must not have duplicate /v1 path segment."""
-    from app.archiver import fetch_image_urls
-
-    config = {
-        "source": {
-            "base_url": "https://aviationwx.org",
-            "airports_api_url": "https://api.aviationwx.org/v1/airports",
-            "request_timeout": 30,
-        },
-    }
-    airport = {"id": "kspb", "icao": "KSPB"}
-
-    with patch("app.archiver.requests.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.ok = True
-        mock_resp.json.return_value = {
-            "webcams": [{"image_url": "/v1/airports/kspb/webcams/0/image"}],
-        }
-        mock_get.return_value = mock_resp
-
-        urls = fetch_image_urls(airport, config)
-
-        call_url = mock_get.call_args[0][0]
-        assert "/v1/v1/" not in call_url
-        assert call_url == "https://api.aviationwx.org/v1/airports/kspb/webcams"
-        assert len(urls) == 1
-        assert urls[0] == "https://api.aviationwx.org/v1/airports/kspb/webcams/0/image"
-
-
 def test_webcam_to_image_url_forms_correct_url_without_double_v1():
     """_webcam_to_image_url must not produce duplicate /v1/ in path."""
     from app.archiver import _webcam_to_image_url
@@ -626,16 +446,6 @@ def test_webcam_to_image_url_forms_correct_url_without_double_v1():
     config = {"source": {"airports_api_url": "https://api.aviationwx.org/v1/airports"}}
     webcam = {"index": 0, "image_url": "/v1/airports/kspb/webcams/0/image"}
     url = _webcam_to_image_url(webcam, config)
-    assert url == "https://api.aviationwx.org/v1/airports/kspb/webcams/0/image"
-    assert "/v1/v1/" not in url
-
-
-def test_absolute_url_path_absolute_no_double_segment():
-    """_absolute_url must not duplicate path when url starts with /."""
-    from app.archiver import _absolute_url
-
-    base = "https://api.aviationwx.org/v1"
-    url = _absolute_url("/v1/airports/kspb/webcams/0/image", base)
     assert url == "https://api.aviationwx.org/v1/airports/kspb/webcams/0/image"
     assert "/v1/v1/" not in url
 
@@ -679,160 +489,6 @@ def test_fetch_history_frames_forms_correct_url():
     assert frames[0]["url"] == (
         "https://api.aviationwx.org/v1/airports/kspb/webcams/0/history?ts=1700000000"
     )
-
-
-def test_fetch_image_urls_falls_back_to_page_scrape_when_api_empty():
-    """When API returns no webcams, page scrape is tried and can succeed."""
-    from app.archiver import fetch_image_urls
-
-    config = {
-        "source": {
-            "base_url": "https://aviationwx.org",
-            "airports_api_url": "https://api.aviationwx.org/v1/airports",
-            "request_timeout": 30,
-        },
-    }
-    airport = {"id": "kspb"}
-
-    def mock_get(url, **kwargs):
-        resp = MagicMock()
-        resp.ok = True
-        if "webcams" in url:
-            resp.json.return_value = {"webcams": []}
-        else:
-            resp.text = '<html><img src="/cams/kspb/webcam_snapshot.jpg"></html>'
-        return resp
-
-    with patch("app.archiver.requests.get", side_effect=mock_get):
-        urls = fetch_image_urls(airport, config)
-
-    assert len(urls) == 1
-    assert "webcam_snapshot" in urls[0]
-    assert "aviationwx.org" in urls[0]
-
-
-def test_fetch_image_urls_logs_warning_on_invalid_webcam_api_json():
-    """fetch_image_urls logs warning when webcam API returns invalid JSON."""
-    import json as json_lib
-
-    from app.archiver import fetch_image_urls
-
-    config = {
-        "source": {
-            "base_url": "https://aviationwx.org",
-            "airports_api_url": "https://api.aviationwx.org/v1/airports",
-            "request_timeout": 30,
-        },
-    }
-    airport = {"id": "kspb"}
-
-    def mock_get(url, **kwargs):
-        resp = MagicMock()
-        resp.ok = True
-        if "webcams" in url:
-            resp.json.side_effect = json_lib.JSONDecodeError("Expecting value", "", 0)
-        else:
-            resp.text = "<html></html>"
-        return resp
-
-    with patch("app.archiver.requests.get", side_effect=mock_get):
-        with patch("app.archiver.logger") as mock_logger:
-            urls = fetch_image_urls(airport, config)
-
-    assert urls == []
-    mock_logger.warning.assert_called()
-    assert any("invalid JSON" in str(c) for c in mock_logger.warning.call_args_list)
-
-
-def test_fetch_image_urls_tries_page_scrape_when_webcam_api_returns_non_ok():
-    """When webcam API returns non-OK status, page scrape fallback is tried."""
-    from app.archiver import fetch_image_urls
-
-    config = {
-        "source": {
-            "base_url": "https://aviationwx.org",
-            "airports_api_url": "https://api.aviationwx.org/v1/airports",
-            "request_timeout": 30,
-        },
-    }
-    airport = {"id": "kspb"}
-
-    def mock_get(url, **kwargs):
-        resp = MagicMock()
-        if "webcams" in url:
-            resp.ok = False
-            resp.status_code = 404
-        else:
-            resp.ok = True
-            resp.text = '<html><img src="/cams/kspb/webcam_snapshot.jpg"></html>'
-        return resp
-
-    with patch("app.archiver.requests.get", side_effect=mock_get):
-        urls = fetch_image_urls(airport, config)
-
-    assert len(urls) == 1
-    assert "webcam_snapshot" in urls[0]
-
-
-def test_fetch_image_urls_page_non_ok_falls_through_to_warning():
-    """When airport page returns non-OK, we log debug and eventually warn."""
-    from app.archiver import fetch_image_urls
-
-    config = {
-        "source": {
-            "base_url": "https://aviationwx.org",
-            "airports_api_url": "https://api.aviationwx.org/v1/airports",
-            "request_timeout": 30,
-        },
-    }
-    airport = {"id": "kspb", "icao": "KSPB"}
-
-    def mock_get(url, **kwargs):
-        resp = MagicMock()
-        if "webcams" in url:
-            resp.ok = True
-            resp.json.return_value = {"webcams": []}
-        else:
-            resp.ok = False
-            resp.status_code = 404
-        resp.text = "<html></html>"
-        return resp
-
-    with patch("app.archiver.requests.get", side_effect=mock_get):
-        urls = fetch_image_urls(airport, config)
-
-    assert urls == []
-
-
-def test_fetch_image_urls_logs_warning_when_no_images_found():
-    """When no images found, a warning is logged with diagnostic info."""
-    from app.archiver import fetch_image_urls
-
-    config = {
-        "source": {
-            "base_url": "https://aviationwx.org",
-            "airports_api_url": "https://api.aviationwx.org/v1/airports",
-            "request_timeout": 30,
-        },
-    }
-    airport = {"id": "kspb", "icao": "KSPB"}
-
-    with patch("app.archiver.requests.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.ok = True
-        mock_resp.json.return_value = {"webcams": []}
-        mock_resp.text = '<html><img src="/logo.png"></html>'
-        mock_get.return_value = mock_resp
-
-        with patch("app.archiver.logger") as mock_logger:
-            urls = fetch_image_urls(airport, config)
-
-        assert urls == []
-        mock_logger.warning.assert_called_once()
-        msg = str(mock_logger.warning.call_args)
-        assert "No images" in msg
-        assert "api.aviationwx.org" in msg
-        assert "base_url" in msg or "config" in msg
 
 
 # ---------------------------------------------------------------------------
@@ -1230,6 +886,18 @@ def test_status_url_returns_empty_when_no_airports_url():
     assert _status_url({"source": {"airports_api_url": ""}}) == ""
 
 
+def test_status_url_targets_final_airports_segment():
+    """_status_url swaps the final /airports segment, ignoring a proxy prefix."""
+    from app.archiver import _status_url
+
+    config = {
+        "source": {
+            "airports_api_url": "https://api.example.com/airports-proxy/v1/airports"
+        }
+    }
+    assert _status_url(config) == "https://api.example.com/airports-proxy/v1/status"
+
+
 def test_detect_and_set_request_delay_uses_partner_limit_when_200_with_header():
     """_detect_and_set_request_delay sets 50% of limit when header present."""
     from app.archiver import _detect_and_set_request_delay
@@ -1350,7 +1018,7 @@ def test_detect_and_set_request_delay_uses_default_when_request_fails():
 
 
 def test_run_archive_calls_detect_and_set_request_delay():
-    """run_archive calls _detect_and_set_request_delay before fetch_airport_list."""
+    """run_archive calls _detect_and_set_request_delay before fetch_webcam_catalog."""
     from app.archiver import run_archive
 
     config = {
@@ -1427,29 +1095,26 @@ def test_setup_airport_archive_creates_metadata_and_structure():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         config = {"archive": {"output_dir": tmpdir}, "source": {}}
-        airport = {"code": "KSPB", "name": "Scappoose"}
-
-        api_response = {
-            "success": True,
-            "meta": {"airport_id": "kspb", "webcam_count": 2},
-            "webcams": [
-                {"index": 0, "name": "North Runway", "image_url": "/v1/kspb/0/image"},
-                {"index": 1, "name": "South Runway", "image_url": "/v1/kspb/1/image"},
-            ],
+        webcams = [
+            {"index": 0, "name": "North Runway", "image_url": "/v1/kspb/0/image"},
+            {"index": 1, "name": "South Runway", "image_url": "/v1/kspb/1/image"},
+        ]
+        airport = {
+            "id": "kspb",
+            "icao": "KSPB",
+            "name": "Scappoose",
+            "webcams": webcams,
         }
 
-        with patch(
-            "app.archiver._fetch_webcams_api_response", return_value=api_response
-        ):
-            webcams = setup_airport_archive(airport, config)
+        result = setup_airport_archive(airport, config)
 
-        assert webcams == api_response["webcams"]
+        assert result == webcams
         meta_path = os.path.join(tmpdir, "KSPB", "metadata.json")
         assert os.path.isfile(meta_path)
         with open(meta_path) as fh:
             meta = json.load(fh)
         assert meta["airport"] == airport
-        assert meta["api_response"] == api_response
+        assert meta["webcams"] == webcams
         assert "last_updated" in meta
 
         # Camera dirs for today
@@ -1474,24 +1139,23 @@ def test_setup_airport_archive_creates_metadata_and_structure():
         assert os.path.isdir(south)
 
 
-def test_setup_airport_archive_returns_none_when_api_fails():
-    """setup_airport_archive returns None when webcams API fails."""
+def test_setup_airport_archive_returns_none_when_no_webcams():
+    """setup_airport_archive returns None when the airport has no webcams."""
     from app.archiver import setup_airport_archive
 
     with tempfile.TemporaryDirectory() as tmpdir:
         config = {"archive": {"output_dir": tmpdir}, "source": {}}
-        airport = {"code": "KSPB"}
+        airport = {"id": "kspb", "icao": "KSPB"}
 
-        with patch("app.archiver._fetch_webcams_api_response", return_value=None):
-            webcams = setup_airport_archive(airport, config)
+        result = setup_airport_archive(airport, config)
 
-        assert webcams is None
+        assert result is None
         meta_path = os.path.join(tmpdir, "KSPB", "metadata.json")
         assert os.path.isfile(meta_path)
         with open(meta_path) as fh:
             meta = json.load(fh)
         assert meta["airport"] == airport
-        assert meta["api_response"] == {}
+        assert meta["webcams"] == []
 
 
 def test_save_image_sets_file_permissions_0644():
@@ -1515,13 +1179,51 @@ def test_save_image_sets_file_permissions_0644():
 
 
 # ---------------------------------------------------------------------------
-# fetch_airport_list tests (mocked HTTP)
+# fetch_webcam_catalog tests (mocked HTTP)
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_airport_list_success():
-    """fetch_airport_list returns airports from a successful API response."""
-    from app.archiver import fetch_airport_list
+def test_bulk_api_url_derives_from_airports_api_url():
+    """_bulk_api_url points at /weathercam/bulk derived from airports_api_url."""
+    from app.archiver import _bulk_api_url
+
+    config = {"source": {"airports_api_url": "https://api.example.com/v1/airports"}}
+    assert _bulk_api_url(config) == "https://api.example.com/v1/weathercam/bulk"
+
+
+def test_bulk_api_url_preserves_scheme_host_and_query():
+    """_bulk_api_url swaps only the path segment, keeping host and query."""
+    from app.archiver import _bulk_api_url
+
+    config = {
+        "source": {
+            "airports_api_url": "https://api.example.com/v9/airports?fmt=json#top"
+        }
+    }
+    assert (
+        _bulk_api_url(config)
+        == "https://api.example.com/v9/weathercam/bulk?fmt=json#top"
+    )
+
+
+def test_bulk_api_url_targets_final_airports_segment():
+    """_bulk_api_url swaps the final /airports, ignoring a proxy prefix."""
+    from app.archiver import _bulk_api_url
+
+    config = {
+        "source": {
+            "airports_api_url": "https://api.example.com/airports-proxy/v1/airports"
+        }
+    }
+    assert (
+        _bulk_api_url(config)
+        == "https://api.example.com/airports-proxy/v1/weathercam/bulk"
+    )
+
+
+def test_fetch_webcam_catalog_success():
+    """fetch_webcam_catalog returns airports from a successful API response."""
+    from app.archiver import fetch_webcam_catalog
 
     config = {
         "source": {
@@ -1538,15 +1240,15 @@ def test_fetch_airport_list_success():
     mock_resp.raise_for_status.return_value = None
 
     with patch("app.archiver.requests.get", return_value=mock_resp):
-        airports = fetch_airport_list(config)
+        airports = fetch_webcam_catalog(config)
 
     assert len(airports) == 2
     assert airports[0]["code"] == "KSPB"
 
 
-def test_fetch_airport_list_sends_api_key_when_configured():
-    """fetch_airport_list includes X-API-Key header when api_key is set."""
-    from app.archiver import fetch_airport_list
+def test_fetch_webcam_catalog_sends_api_key_when_configured():
+    """fetch_webcam_catalog includes X-API-Key header when api_key is set."""
+    from app.archiver import fetch_webcam_catalog
 
     config = {
         "source": {
@@ -1564,7 +1266,7 @@ def test_fetch_airport_list_sends_api_key_when_configured():
     mock_resp.raise_for_status.return_value = None
 
     with patch("app.archiver.requests.get", return_value=mock_resp) as mock_get:
-        fetch_airport_list(config)
+        fetch_webcam_catalog(config)
 
     mock_get.assert_called_once()
     headers = mock_get.call_args.kwargs.get("headers", {})
@@ -1572,11 +1274,11 @@ def test_fetch_airport_list_sends_api_key_when_configured():
     assert "User-Agent" in headers
 
 
-def test_fetch_airport_list_retries_on_failure():
-    """fetch_airport_list retries on RequestException, returns [] when all fail."""
+def test_fetch_webcam_catalog_retries_on_failure():
+    """fetch_webcam_catalog retries on RequestException, returns [] when all fail."""
     import requests as req_lib
 
-    from app.archiver import fetch_airport_list
+    from app.archiver import fetch_webcam_catalog
 
     config = {
         "source": {
@@ -1591,14 +1293,14 @@ def test_fetch_airport_list_retries_on_failure():
         "app.archiver.requests.get",
         side_effect=req_lib.RequestException("network error"),
     ):
-        airports = fetch_airport_list(config)
+        airports = fetch_webcam_catalog(config)
 
     assert airports == []
 
 
-def test_fetch_airport_list_bare_list_response():
-    """fetch_airport_list handles API returning a bare list."""
-    from app.archiver import fetch_airport_list
+def test_fetch_webcam_catalog_bare_list_response():
+    """fetch_webcam_catalog handles API returning a bare list."""
+    from app.archiver import fetch_webcam_catalog
 
     config = {
         "source": {
@@ -1613,15 +1315,15 @@ def test_fetch_airport_list_bare_list_response():
     mock_resp.json.return_value = [{"id": "kspb"}, {"id": "kboi"}]
 
     with patch("app.archiver.requests.get", return_value=mock_resp):
-        airports = fetch_airport_list(config)
+        airports = fetch_webcam_catalog(config)
 
     assert len(airports) == 2
     assert airports[0]["id"] == "kspb"
 
 
-def test_fetch_airport_list_data_key_fallback():
-    """fetch_airport_list uses data key when airports key missing."""
-    from app.archiver import fetch_airport_list
+def test_fetch_webcam_catalog_data_key_fallback():
+    """fetch_webcam_catalog uses data key when airports key missing."""
+    from app.archiver import fetch_webcam_catalog
 
     config = {
         "source": {
@@ -1636,17 +1338,17 @@ def test_fetch_airport_list_data_key_fallback():
     mock_resp.json.return_value = {"data": [{"code": "KSPB"}]}
 
     with patch("app.archiver.requests.get", return_value=mock_resp):
-        airports = fetch_airport_list(config)
+        airports = fetch_webcam_catalog(config)
 
     assert len(airports) == 1
     assert airports[0]["code"] == "KSPB"
 
 
-def test_fetch_airport_list_returns_empty_on_invalid_json():
-    """fetch_airport_list logs warning and returns [] when API returns invalid JSON."""
+def test_fetch_webcam_catalog_returns_empty_on_invalid_json():
+    """fetch_webcam_catalog returns [] on invalid JSON."""
     import json as json_lib
 
-    from app.archiver import fetch_airport_list
+    from app.archiver import fetch_webcam_catalog
 
     config = {
         "source": {
@@ -1661,14 +1363,14 @@ def test_fetch_airport_list_returns_empty_on_invalid_json():
     mock_resp.json.side_effect = json_lib.JSONDecodeError("Expecting value", "", 0)
 
     with patch("app.archiver.requests.get", return_value=mock_resp):
-        airports = fetch_airport_list(config)
+        airports = fetch_webcam_catalog(config)
 
     assert airports == []
 
 
-def test_fetch_airport_list_returns_empty_when_airports_non_list():
-    """fetch_airport_list returns [] when API returns non-list (e.g. airports: 123)."""
-    from app.archiver import fetch_airport_list
+def test_fetch_webcam_catalog_returns_empty_when_airports_non_list():
+    """fetch_webcam_catalog returns [] when airports is not a list."""
+    from app.archiver import fetch_webcam_catalog
 
     config = {
         "source": {
@@ -1683,7 +1385,7 @@ def test_fetch_airport_list_returns_empty_when_airports_non_list():
     mock_resp.json.return_value = {"airports": "invalid"}
 
     with patch("app.archiver.requests.get", return_value=mock_resp):
-        airports = fetch_airport_list(config)
+        airports = fetch_webcam_catalog(config)
 
     assert airports == []
 
@@ -2122,7 +1824,7 @@ def test_run_archive_flushes_batch_in_finally():
             mock_session.return_value.__enter__ = lambda s: s
             mock_session.return_value.__exit__ = lambda *a: None
             fetch_patch = patch(
-                "app.archiver.fetch_airport_list", return_value=[{"code": "KSPB"}]
+                "app.archiver.fetch_webcam_catalog", return_value=[{"code": "KSPB"}]
             )
             with fetch_patch:
                 with patch(
@@ -2201,7 +1903,7 @@ def test_run_archive_finally_does_not_raise_when_flush_fails():
     impl_patch = patch(
         "app.archiver._run_archive_impl", side_effect=add_to_batch_and_return
     )
-    with patch("app.archiver.fetch_airport_list", return_value=[]):
+    with patch("app.archiver.fetch_webcam_catalog", return_value=[]):
         with impl_patch:
             with patch(
                 "app.archiver._flush_archive_index_batch",
@@ -2363,17 +2065,20 @@ def test_run_archive_full_flow_with_mocked_http():
         def mock_get(url, **kwargs):
             resp = MagicMock()
             resp.ok = True
-            if "airports" in url and "webcams" not in url:
+            if "weathercam/bulk" in url:
                 resp.json.return_value = {
-                    "airports": [{"id": "kspb", "icao": "KSPB"}],
-                }
-            elif "/image" in url or url.endswith("image"):
-                resp.headers = {"content-type": "image/jpeg"}
-                resp.content = b"\xff\xd8\xff\xe0"
-            elif "webcams" in url:
-                resp.json.return_value = {
-                    "webcams": [
-                        {"image_url": "/v1/airports/kspb/webcams/0/image"},
+                    "airports": [
+                        {
+                            "id": "kspb",
+                            "icao": "KSPB",
+                            "webcams": [
+                                {
+                                    "index": 0,
+                                    "name": "North Runway",
+                                    "image_url": "/v1/airports/kspb/webcams/0/image",
+                                }
+                            ],
+                        }
                     ],
                 }
             else:
@@ -2720,18 +2425,23 @@ def test_run_archive_skips_airport_with_no_code():
         resp = MagicMock()
         resp.ok = True
         resp.raise_for_status.return_value = None
-        if "airports" in url and "webcams" not in url:
+        if "weathercam/bulk" in url:
             resp.json.return_value = {
                 "airports": [
-                    {"code": "KSPB"},
+                    {
+                        "id": "kspb",
+                        "icao": "KSPB",
+                        "webcams": [
+                            {
+                                "index": 0,
+                                "name": "North Runway",
+                                "image_url": "/v1/airports/kspb/webcams/0/image",
+                            }
+                        ],
+                    },
                     {"name": "No Code Airport"},  # No code, id, or icao
                 ],
             }
-        elif "webcams" in url:
-            resp.json.return_value = {"webcams": []}
-            resp.text = '<html><img src="/cams/kspb/webcam_snapshot.jpg"></html>'
-        elif "airport=" in url:
-            resp.text = '<html><img src="/cams/kspb/webcam_snapshot.jpg"></html>'
         else:
             resp.headers = {"content-type": "image/jpeg"}
             resp.content = b"\xff\xd8\xff"
@@ -2770,13 +2480,17 @@ def test_run_archive_use_history_false_uses_current_only():
             if "/image" in url or url.endswith("image"):
                 resp.headers = {"content-type": "image/jpeg"}
                 resp.content = b"\xff\xd8\xff\xe0"
-            elif "airports" in url and "webcams" not in url:
+            elif "weathercam/bulk" in url:
                 resp.json.return_value = {
-                    "airports": [{"id": "kspb", "icao": "KSPB"}],
-                }
-            elif "webcams" in url:
-                resp.json.return_value = {
-                    "webcams": [{"image_url": "/v1/airports/kspb/webcams/0/image"}],
+                    "airports": [
+                        {
+                            "id": "kspb",
+                            "icao": "KSPB",
+                            "webcams": [
+                                {"image_url": "/v1/airports/kspb/webcams/0/image"}
+                            ],
+                        }
+                    ],
                 }
             else:
                 resp.headers = {"content-type": "image/jpeg"}
@@ -2813,9 +2527,22 @@ def test_run_archive_history_mode_downloads_missing_frames():
         def mock_get(url, **kwargs):
             resp = MagicMock()
             resp.ok = True
-            if "airports" in url and "webcams" not in url:
+            if "weathercam/bulk" in url:
                 resp.json.return_value = {
-                    "airports": [{"id": "kspb", "icao": "KSPB"}],
+                    "airports": [
+                        {
+                            "id": "kspb",
+                            "icao": "KSPB",
+                            "webcams": [
+                                {
+                                    "index": 0,
+                                    "image_url": "/v1/airports/kspb/webcams/0/image",
+                                    "history_enabled": True,
+                                    "history_url": "/v1/kspb/0/history",
+                                },
+                            ],
+                        }
+                    ],
                 }
             elif "history" in url and "ts=" not in url:
                 resp.json.return_value = {
@@ -2825,20 +2552,6 @@ def test_run_archive_history_mode_downloads_missing_frames():
                             "timestamp": 1700000000,
                             "timestamp_iso": "2023-11-15T02:13:20+00:00",
                             "url": "/v1/airports/kspb/webcams/0/history?ts=1700000000",
-                        },
-                    ],
-                }
-            elif "history" in url or "/image" in url:
-                resp.headers = {"content-type": "image/jpeg"}
-                resp.content = b"\xff\xd8\xff\xe0"
-            elif "webcams" in url:
-                resp.json.return_value = {
-                    "webcams": [
-                        {
-                            "index": 0,
-                            "image_url": "/v1/airports/kspb/webcams/0/image",
-                            "history_enabled": True,
-                            "history_url": "/v1/airports/kspb/webcams/0/history",
                         },
                     ],
                 }
@@ -2909,14 +2622,19 @@ def test_run_archive_warns_when_fetched_but_none_saved():
         def mock_get(url, **kwargs):
             resp = MagicMock()
             resp.ok = True
-            if "airports" in url and "webcams" not in url:
-                resp.json.return_value = {"airports": [{"id": "kspb"}]}
-            elif "/image" in url or url.endswith("image"):
+            if "/image" in url or url.endswith("image"):
                 resp.headers = {"content-type": "image/jpeg"}
                 resp.content = b"\xff\xd8\xff"
-            elif "webcams" in url:
+            elif "weathercam/bulk" in url:
                 resp.json.return_value = {
-                    "webcams": [{"image_url": "/v1/airports/kspb/webcams/0/image"}],
+                    "airports": [
+                        {
+                            "id": "kspb",
+                            "webcams": [
+                                {"image_url": "/v1/airports/kspb/webcams/0/image"}
+                            ],
+                        }
+                    ],
                 }
             return resp
 
@@ -3189,11 +2907,17 @@ def test_run_archive_applies_retention_including_max_gb():
             resp = MagicMock()
             resp.ok = True
             resp.raise_for_status.return_value = None
-            if "airports" in url and "webcams" not in url:
-                resp.json.return_value = {"airports": [{"code": "KSPB"}]}
-            elif "webcams" in url:
-                resp.json.return_value = {"webcams": []}
-                resp.text = "<html></html>"
+            if "weathercam/bulk" in url:
+                resp.json.return_value = {
+                    "airports": [
+                        {
+                            "id": "kspb",
+                            "webcams": [
+                                {"image_url": "/v1/airports/kspb/webcams/0/image"}
+                            ],
+                        }
+                    ],
+                }
             else:
                 resp.headers = {"content-type": "image/jpeg"}
                 resp.content = b"\xff\xd8\xff"
@@ -3236,11 +2960,17 @@ def test_run_archive_skips_retention_when_retention_on_archive_run_false():
             resp = MagicMock()
             resp.ok = True
             resp.raise_for_status.return_value = None
-            if "airports" in url and "webcams" not in url:
-                resp.json.return_value = {"airports": [{"code": "KSPB"}]}
-            elif "webcams" in url:
-                resp.json.return_value = {"webcams": []}
-                resp.text = "<html></html>"
+            if "weathercam/bulk" in url:
+                resp.json.return_value = {
+                    "airports": [
+                        {
+                            "id": "kspb",
+                            "webcams": [
+                                {"image_url": "/v1/airports/kspb/webcams/0/image"}
+                            ],
+                        }
+                    ],
+                }
             else:
                 resp.headers = {"content-type": "image/jpeg"}
                 resp.content = b"\xff\xd8\xff"

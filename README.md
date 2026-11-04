@@ -81,7 +81,7 @@ Key settings:
 | `schedule.retention_hour` | `3` | Daily retention cleanup hour (0-23, UTC). 3 = 3 AM. |
 | `schedule.retention_minute` | `0` | Daily retention cleanup minute (0-59). |
 | `airports.archive_all` | `false` | Archive every airport on AviationWX.org |
-| `airports.selected` | `[KSPB, KAWO]` | Specific airport codes when archive_all is false |
+| `airports.selected` | `[KSPB, KHIO]` | Specific airport codes when archive_all is false |
 | `source.use_history_api` | `true` | Use history API to fetch all frames, download only missing; `false` = current image only per run |
 | `source.api_key` | `""` | Partner API key (optional). Enables 500 req/min vs 100/min anonymous. |
 | `source.request_delay_seconds` | `1.2` | Fallback delay when rate-limit probe fails; otherwise auto-detected from API (50% of limit) |
@@ -107,12 +107,12 @@ Any config setting can be overridden via `ARCHIVER_*` environment variables. Env
 | `ARCHIVER_SCHEDULE_RETENTION_MINUTE` | `schedule.retention_minute` | `0` |
 | `ARCHIVER_SOURCE_API_KEY` | `source.api_key` | `your-key` |
 | `ARCHIVER_AIRPORTS_ARCHIVE_ALL` | `airports.archive_all` | `false` |
-| `ARCHIVER_AIRPORTS_SELECTED` | `airports.selected` | `KSPB,KAWO` |
+| `ARCHIVER_AIRPORTS_SELECTED` | `airports.selected` | `KSPB,KHIO` |
 | `ARCHIVER_WEB_ENABLED` | `web.enabled` | `true` |
 | `ARCHIVER_WEB_PRIORITY_YIELD_SECONDS` | `web.priority_yield_seconds` | `0.02` |
 | `ARCHIVER_LOGGING_LEVEL` | `logging.level` | `INFO` |
 
-Booleans: `true`, `false`, `1`, `0`, `yes`, `no`. Lists: comma- or newline-separated (e.g. `KSPB,KAWO`).
+Booleans: `true`, `false`, `1`, `0`, `yes`, `no`. Lists: comma- or newline-separated (e.g. `KSPB,KHIO`).
 
 **Example: configure entirely via env vars:**
 
@@ -122,7 +122,7 @@ docker run -d \
   -p 8080:8080 \
   -v $(pwd)/archive:/archive \
   -v config_data:/config \
-  -e ARCHIVER_AIRPORTS_SELECTED=KSPB,KAWO \
+  -e ARCHIVER_AIRPORTS_SELECTED=KSPB,KHIO \
   -e ARCHIVER_SCHEDULE_INTERVAL_MINUTES=15 \
   -e ARCHIVER_SOURCE_API_KEY=your-partner-key \
   ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest
@@ -143,7 +143,7 @@ archive/
 │               │   └── 1718456780_0.jpg   # history mode: {timestamp}_{cam}.jpg
 │               └── scappoose_airport_south_runway/
 │                   └── 20240615_150000_webcam.jpg
-└── KAWO/
+└── KHIO/
     ├── metadata.json
     └── 2024/
         └── 06/
@@ -227,7 +227,7 @@ docker run -d \
   -p 8080:8080 \
   -v $(pwd)/archive:/archive \
   -v config_data:/config \
-  -e ARCHIVER_AIRPORTS_SELECTED=KSPB,KAWO \
+  -e ARCHIVER_AIRPORTS_SELECTED=KSPB,KHIO \
   ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest
 ```
 
@@ -242,7 +242,7 @@ docker run -d \
    - Host: `/mnt/user/appdata/aviationwx/archive` → Container: `/archive`
    - Add a path for config (optional): Host: `/mnt/user/appdata/aviationwx/config` → Container: `/config`
 7. **Environment variables** (optional; or configure via web GUI after first start):
-   - `ARCHIVER_AIRPORTS_SELECTED` = `KSPB,KAWO` (comma-separated airport codes)
+   - `ARCHIVER_AIRPORTS_SELECTED` = `KSPB,KHIO` (comma-separated airport codes)
    - `ARCHIVER_SCHEDULE_INTERVAL_MINUTES` = `15`
 8. **Apply** and start the container.
 9. Open `http://your-unraid-ip:8080` to configure airports and schedule.
