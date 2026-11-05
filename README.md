@@ -89,6 +89,7 @@ Key settings:
 | `web.port` | `8080` | Web GUI port |
 | `web.priority_yield_seconds` | `0.02` | When > 0 and web enabled: archive worker yields at strategic points so the web UI stays responsive. Set to `0` to disable. |
 | `logging.level` | `INFO` | Log verbosity: DEBUG, INFO, WARNING, ERROR |
+| `ntp.server` | `time.cloudflare.com` | NTP server checked before archiving; use a local server if outbound NTP is blocked |
 
 ### Environment variable overrides
 
@@ -111,6 +112,7 @@ Any config setting can be overridden via `ARCHIVER_*` environment variables. Env
 | `ARCHIVER_WEB_ENABLED` | `web.enabled` | `true` |
 | `ARCHIVER_WEB_PRIORITY_YIELD_SECONDS` | `web.priority_yield_seconds` | `0.02` |
 | `ARCHIVER_LOGGING_LEVEL` | `logging.level` | `INFO` |
+| `ARCHIVER_NTP_SERVER` | `ntp.server` | `time.cloudflare.com` |
 
 Booleans: `true`, `false`, `1`, `0`, `yes`, `no`. Lists: comma- or newline-separated (e.g. `KSPB,KHIO`).
 

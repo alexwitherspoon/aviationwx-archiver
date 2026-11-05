@@ -107,7 +107,9 @@ def main() -> None:
     # Web UI and NTP monitor read config through a getter so UI changes take
     # effect without a restart.
     app.config["ARCHIVER_CONFIG"] = config
-    start_ntp_monitor(lambda: app.config["ARCHIVER_CONFIG"]["ntp"]["server"])
+    start_ntp_monitor(
+        lambda: (app.config["ARCHIVER_CONFIG"].get("ntp") or {}).get("server")
+    )
 
     scheduler = start_scheduler(lambda: app.config["ARCHIVER_CONFIG"])
 

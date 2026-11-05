@@ -15,7 +15,8 @@ from app.config import check_host_resources, load_config
 
 def test_ntp_server_defaults_to_cloudflare():
     """ntp.server defaults to time.cloudflare.com when not configured."""
-    config = load_config("/nonexistent/config.yaml")
+    with patch.dict(os.environ, {"ARCHIVER_NTP_SERVER": ""}, clear=False):
+        config = load_config("/nonexistent/config.yaml")
     assert config["ntp"]["server"] == "time.cloudflare.com"
 
 

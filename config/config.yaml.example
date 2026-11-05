@@ -114,3 +114,11 @@ logging:
 
   # Log file path (empty = stdout only)
   file: ""
+
+# ============================================================
+# Time (NTP)
+# ============================================================
+ntp:
+  # NTP server used to verify the system clock before archiving. Use a local
+  # server if outbound NTP is blocked.
+  server: time.cloudflare.com

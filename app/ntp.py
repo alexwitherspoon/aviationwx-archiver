@@ -60,7 +60,7 @@ def _query_offset(
     def _run() -> None:
         try:
             client = ntplib.NTPClient()
-            response = client.request(server, version=3)
+            response = client.request(server.strip(), version=3)
             result["offset"] = float(response.offset)
         except Exception as exc:
             result["error"] = exc
@@ -125,6 +125,7 @@ def _update(status: str, offset: float | None, error: str | None) -> None:
 
 def _check_once(server: str = _DEFAULT_NTP_SERVER) -> None:
     """Perform one NTP check against ``server`` and update the health state."""
+    server = (server or _DEFAULT_NTP_SERVER).strip() or _DEFAULT_NTP_SERVER
     with _lock:
         _state["server"] = server
     try:
@@ -141,7 +142,11 @@ def _check_once(server: str = _DEFAULT_NTP_SERVER) -> None:
 def _monitor_loop(server_getter, interval_sec: float) -> None:
     """Check NTP on a fixed interval, re-reading the server each pass."""
     while True:
-        _check_once(server_getter())
+        try:
+            server = server_getter()
+        except Exception:
+            server = _DEFAULT_NTP_SERVER
+        _check_once(server)
         time.sleep(interval_sec)
 
 
