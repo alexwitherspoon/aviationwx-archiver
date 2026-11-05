@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from app.config import _CONFIG_PATH_ENV, _DEFAULT_CONFIG_PATH
+from app.config import _CONFIG_PATH_ENV, _DEFAULT_CONFIG_PATH, normalize_selector_codes
 from app.constants import (
     API_LIMIT_ANONYMOUS_REQ_PER_MIN,
     BYTES_PER_GIB,
@@ -779,20 +779,16 @@ def load_catalog_projection(config_path: str | None = None) -> list[dict] | None
     if not isinstance(data, dict) or data.get("version") != _CATALOG_PROJECTION_VERSION:
         return None
     airports = data.get("airports")
-    return airports if isinstance(airports, list) else None
+    if not isinstance(airports, list):
+        return None
+    if not all(isinstance(row, dict) for row in airports):
+        return None
+    return airports
 
 
 def _selector_set(values: object) -> set[str]:
     """Return an uppercase set of selector values, tolerating a scalar string."""
-    if isinstance(values, str):
-        values = [values]
-    if not isinstance(values, (list, tuple, set)):
-        return set()
-    return {
-        value.strip().upper()
-        for value in values
-        if isinstance(value, str) and value.strip()
-    }
+    return set(normalize_selector_codes(values))
 
 
 def select_airports(all_airports: list[dict], config: dict) -> list[dict]:

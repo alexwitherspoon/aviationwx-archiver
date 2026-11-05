@@ -43,6 +43,7 @@ from app.browse import (
 from app.config import (
     DEFAULT_SLOW_REQUEST_LOG_SECONDS,
     _coerce_float_for_validation,
+    normalize_selector_codes,
     save_config,
     validate_config,
 )
@@ -935,20 +936,7 @@ def _with_saved_options(options, saved):
 
 def _normalize_selector_list(values):
     """Canonical uppercase list from a null, scalar, or list value."""
-    if values is None:
-        return []
-    if isinstance(values, str):
-        return [values.strip().upper()] if values.strip() else []
-    if not isinstance(values, (list, tuple, set)):
-        return []
-    result = []
-    for value in values:
-        if not isinstance(value, str):
-            continue
-        code = value.strip().upper()
-        if code:
-            result.append(code)
-    return result
+    return normalize_selector_codes(values)
 
 
 def _form_to_config(form, existing_config: dict) -> dict:

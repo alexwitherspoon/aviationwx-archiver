@@ -162,6 +162,24 @@ def _parse_env_list(val: str) -> list[str]:
     return items
 
 
+def normalize_selector_codes(values) -> list[str]:
+    """Return uppercase, non-blank string selector codes from a value."""
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple, set)):
+        return []
+    result = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        code = value.strip().upper()
+        if code:
+            result.append(code)
+    return result
+
+
 def _env_overrides() -> dict:
     """Build config override dict from ARCHIVER_* environment variables."""
     overrides: dict = {}
@@ -310,10 +328,12 @@ def validate_config(config: dict) -> list[str]:
 
     airports_cfg = config.get("airports", {})
     archive_all = airports_cfg.get("archive_all", False)
-    selected = airports_cfg.get("selected", [])
-    regions = airports_cfg.get("regions", [])
-    countries = airports_cfg.get("countries", [])
-    if not archive_all and not selected and not regions and not countries:
+    has_selector = (
+        normalize_selector_codes(airports_cfg.get("selected"))
+        or normalize_selector_codes(airports_cfg.get("regions"))
+        or normalize_selector_codes(airports_cfg.get("countries"))
+    )
+    if not archive_all and not has_selector:
         errors.append(
             "Select at least one airport: enable 'Archive all airports' or add "
             "airport codes, regions, or countries to the selection."

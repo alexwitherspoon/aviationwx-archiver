@@ -205,6 +205,18 @@ def test_validate_config_valid_with_countries():
     assert validate_config(config) == []
 
 
+def test_validate_config_rejects_only_non_string_selectors():
+    """Selectors with only non-string values are invalid, matching select_airports."""
+    from app.config import validate_config
+
+    config = {
+        "archive": {"output_dir": "/archive", "retention_days": 0},
+        "airports": {"archive_all": False, "selected": [42], "regions": [None]},
+        "source": {"airports_api_url": "https://api.example.com/airports"},
+    }
+    assert validate_config(config) != []
+
+
 def test_check_host_resources_warns_when_output_dir_missing():
     """check_host_resources logs warning when output_dir does not exist."""
     from app.config import check_host_resources
@@ -1391,6 +1403,18 @@ def test_load_catalog_projection_returns_none_when_missing():
     from app.archiver import load_catalog_projection
 
     assert load_catalog_projection(config_path="/nonexistent/dir/config.yaml") is None
+
+
+def test_load_catalog_projection_rejects_non_mapping_rows():
+    """A projection whose airports are not dicts returns None."""
+    from app.archiver import load_catalog_projection
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = os.path.join(tmpdir, "config.yaml")
+        proj_path = os.path.join(tmpdir, "catalog.json")
+        with open(proj_path, "w") as fh:
+            json.dump({"version": 1, "airports": ["kspb", "kboi"]}, fh)
+        assert load_catalog_projection(config_path=config_path) is None
 
 
 def test_fetch_webcam_catalog_success():
