@@ -99,13 +99,44 @@
     <div class="checkbox-row">
       <input type="checkbox" id="archive_all" name="archive_all"
              {% if config.airports.archive_all %}checked{% endif %}
-             onchange="document.getElementById('selected-block').style.display=this.checked?'none':'block'">
+             onchange="document.getElementById('selector-block').style.display=this.checked?'none':'block'">
       <label for="archive_all" style="margin:0; color:var(--text)">Archive ALL airports available on AviationWX.org</label>
     </div>
-    <div id="selected-block" {% if config.airports.archive_all %}style="display:none"{% endif %}>
-      <label for="selected_airports">Airport codes to archive (one per line, or comma-separated): required if not archiving all</label>
-      <textarea id="selected_airports" name="selected_airports" rows="6"
+    <div id="selector-block" {% if config.airports.archive_all %}style="display:none"{% endif %}>
+      <label>Countries</label>
+      {% if country_options %}
+      <div class="grid-3">
+        {% for code, name in country_options %}
+        <label class="checkbox-row" style="margin:0">
+          <input type="checkbox" name="countries" value="{{ code }}"
+                 {% if code in config.airports.countries %}checked{% endif %}>
+          <span>{{ name }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <small style="color:var(--text-muted)">No countries found yet. Use "Test / refresh catalog" under Source to load them.</small>
+      {% endif %}
+
+      <label style="margin-top:12px">States / regions</label>
+      {% if region_options %}
+      <div class="grid-3">
+        {% for code, name in region_options %}
+        <label class="checkbox-row" style="margin:0">
+          <input type="checkbox" name="regions" value="{{ code }}"
+                 {% if code in config.airports.regions %}checked{% endif %}>
+          <span>{{ name }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <small style="color:var(--text-muted)">No regions found yet. Use "Test / refresh catalog" under Source to load them.</small>
+      {% endif %}
+
+      <label for="selected_airports" style="margin-top:12px">Airport codes (one per line, or comma-separated)</label>
+      <textarea id="selected_airports" name="selected_airports" rows="4"
                 placeholder="KSPB&#10;KHIO&#10;KBOI">{{ config.airports.selected | join('\n') }}</textarea>
+      <small style="color:var(--text-muted)">Codes, countries, and regions combine. Leave this blank if you selected a country or region.</small>
     </div>
   </div>
 

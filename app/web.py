@@ -604,6 +604,12 @@ def configuration():
             logger.warning("Configuration form error: %s", exc, exc_info=True)
             error = "Invalid form data. Check that all required fields are present."
 
+    from app.archiver import load_catalog_projection
+
+    projection = load_catalog_projection() or []
+    country_options = _projection_options(projection, "country", "country_name")
+    region_options = _projection_options(projection, "region", "region_name")
+
     config_errors = validate_config(config)
     return render_template(
         "config.html",
@@ -611,6 +617,8 @@ def configuration():
         message=message,
         error=error,
         config_errors=config_errors,
+        country_options=country_options,
+        region_options=region_options,
     )
 
 
@@ -872,6 +880,19 @@ def api_status():
 # ---------------------------------------------------------------------------
 
 
+def _projection_options(
+    rows: list[dict], code_key: str, name_key: str
+) -> list[tuple[str, str]]:
+    """Distinct (code, name) pairs from the projection, sorted by name."""
+    seen: dict[str, str] = {}
+    for row in rows:
+        code = row.get(code_key)
+        if not code:
+            continue
+        seen[str(code).upper()] = row.get(name_key) or str(code)
+    return sorted(seen.items(), key=lambda item: item[1].lower())
+
+
 def _form_to_config(form, existing_config: dict) -> dict:
     """Convert web form POST data into a config dict."""
     import copy
@@ -927,6 +948,12 @@ def _form_to_config(form, existing_config: dict) -> dict:
         if c.strip()
     ]
     config["airports"]["selected"] = selected
+    config["airports"]["regions"] = [
+        r.strip().upper() for r in form.getlist("regions") if r.strip()
+    ]
+    config["airports"]["countries"] = [
+        c.strip().upper() for c in form.getlist("countries") if c.strip()
+    ]
 
     # Source
     api_key = form.get("api_key", "").strip()

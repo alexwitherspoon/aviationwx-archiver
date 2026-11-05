@@ -489,6 +489,27 @@ def test_form_to_config_sets_api_key_when_provided():
     assert config["source"]["api_key"] == "test-key-123"
 
 
+def test_form_to_config_sets_regions_and_countries():
+    """_form_to_config reads regions and countries from checkbox getlist."""
+    form = MagicMock()
+    form.get.side_effect = lambda k, d=None: {
+        "interval_minutes": "15",
+        "output_dir": "/archive",
+        "retention_days": "0",
+        "retention_max_gb": "0",
+        "selected_airports": "",
+        "log_level": "INFO",
+    }.get(k, d)
+    form.__contains__ = lambda self, k: k in ["fetch_on_start"]
+    form.getlist.side_effect = lambda k: (
+        ["US-OR", "us-id"] if k == "regions" else (["ca"] if k == "countries" else [])
+    )
+
+    config = _form_to_config(form, DEFAULT_CONFIG)
+    assert config["airports"]["regions"] == ["US-OR", "US-ID"]
+    assert config["airports"]["countries"] == ["CA"]
+
+
 # ---------------------------------------------------------------------------
 # Route tests (require Flask app context)
 # ---------------------------------------------------------------------------
@@ -608,6 +629,36 @@ def test_test_source_reports_failure_when_no_airports(flask_client):
     data = resp.get_json()
     assert data["ok"] is False
     assert "error" in data
+
+
+def test_config_page_renders_region_options(flask_client):
+    """GET /config lists countries and regions from the projection."""
+    projection = [
+        {
+            "id": "KSPB",
+            "name": "Scappoose",
+            "country": "US",
+            "country_name": "United States of America",
+            "region": "US-OR",
+            "region_name": "Oregon",
+        },
+        {
+            "id": "KBOI",
+            "name": "Boise",
+            "country": "US",
+            "country_name": "United States of America",
+            "region": "US-ID",
+            "region_name": "Idaho",
+        },
+    ]
+    with patch("app.archiver.load_catalog_projection", return_value=projection):
+        resp = flask_client.get("/config")
+
+    assert resp.status_code == 200
+    assert b"Oregon" in resp.data
+    assert b"Idaho" in resp.data
+    assert b'value="US-OR"' in resp.data
+    assert b'value="US"' in resp.data
 
 
 def test_trigger_archive_redirects_to_config_when_invalid(flask_client):
