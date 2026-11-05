@@ -103,10 +103,12 @@ def main() -> None:
     logger.info("AviationWX.org Archiver starting up.")
 
     check_host_resources(config)
-    start_ntp_monitor()
 
-    # Scheduler uses getter so web UI config changes take effect on next run
+    # Web UI and NTP monitor read config through a getter so UI changes take
+    # effect without a restart.
     app.config["ARCHIVER_CONFIG"] = config
+    start_ntp_monitor(lambda: app.config["ARCHIVER_CONFIG"]["ntp"]["server"])
+
     scheduler = start_scheduler(lambda: app.config["ARCHIVER_CONFIG"])
 
     web_enabled = config["web"].get("enabled", True)

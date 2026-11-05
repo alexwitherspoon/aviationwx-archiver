@@ -916,6 +916,11 @@ def _form_to_config(form, existing_config: dict) -> dict:
     if api_key:
         config["source"]["api_key"] = api_key
 
+    # Time (NTP)
+    ntp_server = form.get("ntp_server", "").strip()
+    if ntp_server:
+        config["ntp"]["server"] = ntp_server
+
     # Logging
     log_level = form.get("log_level", "INFO").strip().upper()
     if log_level not in ("DEBUG", "INFO", "WARNING", "ERROR"):

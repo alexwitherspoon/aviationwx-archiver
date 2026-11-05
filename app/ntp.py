@@ -21,8 +21,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# NTP server (pool.ntp.org resolves to multiple servers, uses UTC)
-_NTP_SERVER = "pool.ntp.org"
+# Default NTP server when none is configured (pool.ntp.org round-robins).
+_DEFAULT_NTP_SERVER = "pool.ntp.org"
 
 # Max allowed offset (seconds) between system UTC and NTP before marking unhealthy
 _NTP_OFFSET_THRESHOLD_SEC = 10
@@ -41,14 +41,17 @@ _state = {
     "offset_sec": None,  # float | None, last measured offset
     "last_check_ts": None,  # float | None, time.time() of last completed check
     "last_error": None,  # str | None, last failure reason
-    "server": _NTP_SERVER,
+    "server": _DEFAULT_NTP_SERVER,
     "threshold_sec": _NTP_OFFSET_THRESHOLD_SEC,
     "interval_sec": _NTP_MONITOR_INTERVAL_SEC,
 }
 
 
-def _query_offset(timeout_sec: float = _NTP_CHECK_TIMEOUT_SEC) -> float:
-    """Return the clock offset from NTP in seconds, bounded to ``timeout_sec``."""
+def _query_offset(
+    server: str = _DEFAULT_NTP_SERVER,
+    timeout_sec: float = _NTP_CHECK_TIMEOUT_SEC,
+) -> float:
+    """Return the clock offset from ``server``, bounded to ``timeout_sec``."""
     if ntplib is None:
         raise RuntimeError("ntplib not installed")
 
@@ -57,7 +60,7 @@ def _query_offset(timeout_sec: float = _NTP_CHECK_TIMEOUT_SEC) -> float:
     def _run() -> None:
         try:
             client = ntplib.NTPClient()
-            response = client.request(_NTP_SERVER, version=3)
+            response = client.request(server, version=3)
             result["offset"] = float(response.offset)
         except Exception as exc:
             result["error"] = exc
@@ -72,7 +75,10 @@ def _query_offset(timeout_sec: float = _NTP_CHECK_TIMEOUT_SEC) -> float:
     return result["offset"]
 
 
-def check_ntp_time(threshold_sec: float = _NTP_OFFSET_THRESHOLD_SEC) -> bool:
+def check_ntp_time(
+    server: str = _DEFAULT_NTP_SERVER,
+    threshold_sec: float = _NTP_OFFSET_THRESHOLD_SEC,
+) -> bool:
     """
     One-shot check: True if the clock is within threshold, or NTP is unreachable.
 
@@ -83,12 +89,12 @@ def check_ntp_time(threshold_sec: float = _NTP_OFFSET_THRESHOLD_SEC) -> bool:
         logger.warning("ntplib not installed; skipping NTP time verification.")
         return True
     try:
-        offset = _query_offset()
+        offset = _query_offset(server)
     except Exception as exc:
         logger.warning(
             "Could not verify system time via NTP (%s): %s. "
             "Proceeding without time verification.",
-            _NTP_SERVER,
+            server,
             exc,
         )
         return True
@@ -96,12 +102,12 @@ def check_ntp_time(threshold_sec: float = _NTP_OFFSET_THRESHOLD_SEC) -> bool:
         logger.error(
             "System time is incorrect: UTC offset from NTP (%s) is %.1f s "
             "(threshold %.1f s).",
-            _NTP_SERVER,
+            server,
             offset,
             threshold_sec,
         )
         return False
-    logger.debug("NTP check OK: UTC offset %.2f s from %s", offset, _NTP_SERVER)
+    logger.debug("NTP check OK: UTC offset %.2f s from %s", offset, server)
     return True
 
 
@@ -117,10 +123,12 @@ def _update(status: str, offset: float | None, error: str | None) -> None:
         logger.info("NTP health: %s -> %s", previous, status)
 
 
-def _check_once() -> None:
-    """Perform one NTP check and update the health state."""
+def _check_once(server: str = _DEFAULT_NTP_SERVER) -> None:
+    """Perform one NTP check against ``server`` and update the health state."""
+    with _lock:
+        _state["server"] = server
     try:
-        offset = _query_offset()
+        offset = _query_offset(server)
     except Exception as exc:
         _update("unknown", None, str(exc))
         return
@@ -130,18 +138,22 @@ def _check_once() -> None:
         _update("healthy", offset, None)
 
 
-def _monitor_loop(interval_sec: float) -> None:
-    """Check NTP on a fixed interval until the process exits."""
+def _monitor_loop(server_getter, interval_sec: float) -> None:
+    """Check NTP on a fixed interval, re-reading the server each pass."""
     while True:
-        _check_once()
+        _check_once(server_getter())
         time.sleep(interval_sec)
 
 
-def start_ntp_monitor(interval_sec: float = _NTP_MONITOR_INTERVAL_SEC) -> None:
+def start_ntp_monitor(
+    server_getter=None, interval_sec: float = _NTP_MONITOR_INTERVAL_SEC
+) -> None:
     """Start the background NTP health monitor thread."""
+    if server_getter is None:
+        server_getter = lambda: _DEFAULT_NTP_SERVER  # noqa: E731
     threading.Thread(
         target=_monitor_loop,
-        args=(interval_sec,),
+        args=(server_getter, interval_sec),
         daemon=True,
         name="ntp-monitor",
     ).start()

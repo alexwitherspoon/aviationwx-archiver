@@ -80,6 +80,9 @@ DEFAULT_CONFIG = {
         "level": "INFO",
         "file": "",
     },
+    "ntp": {
+        "server": "pool.ntp.org",
+    },
 }
 
 _CONFIG_PATH_ENV = "ARCHIVER_CONFIG"
@@ -139,6 +142,7 @@ _ENV_TO_CONFIG: list[tuple[str, tuple[str, ...], str | type]] = [
     ),
     ("ARCHIVER_LOGGING_LEVEL", ("logging", "level"), str),
     ("ARCHIVER_LOGGING_FILE", ("logging", "file"), str),
+    ("ARCHIVER_NTP_SERVER", ("ntp", "server"), str),
 ]
 
 
@@ -405,6 +409,10 @@ def validate_config(config: dict) -> list[str]:
         errors.append(slow_err)
     elif slow is not None and (slow < 0 or slow > 300):
         errors.append("web.slow_request_log_seconds must be between 0 and 300.")
+
+    ntp_cfg = config.get("ntp")
+    if isinstance(ntp_cfg, dict) and not str(ntp_cfg.get("server") or "").strip():
+        errors.append("ntp.server must not be empty.")
 
     if errors:
         logger.debug("Config validation failed: %s", "; ".join(errors))

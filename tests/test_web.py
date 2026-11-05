@@ -489,6 +489,24 @@ def test_form_to_config_sets_api_key_when_provided():
     assert config["source"]["api_key"] == "test-key-123"
 
 
+def test_form_to_config_sets_ntp_server():
+    """_form_to_config sets ntp.server when the form provides a server."""
+    form = MagicMock()
+    form.get.side_effect = lambda k, d=None: {
+        "interval_minutes": "15",
+        "output_dir": "/archive",
+        "retention_days": "0",
+        "retention_max_gb": "0",
+        "selected_airports": "KSPB",
+        "log_level": "INFO",
+        "ntp_server": "10.0.0.5",
+    }.get(k, d)
+    form.__contains__ = lambda self, k: k in ["fetch_on_start"]
+
+    config = _form_to_config(form, DEFAULT_CONFIG)
+    assert config["ntp"]["server"] == "10.0.0.5"
+
+
 # ---------------------------------------------------------------------------
 # Route tests (require Flask app context)
 # ---------------------------------------------------------------------------
