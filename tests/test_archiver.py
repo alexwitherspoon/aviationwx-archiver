@@ -55,6 +55,22 @@ def test_load_config_reads_yaml_file():
         os.unlink(tmp_path)
 
 
+def test_load_config_preserves_unquoted_no_country_code():
+    """Unquoted NO in YAML loads as the string NO, not boolean False."""
+    from app.config import load_config
+
+    content = "airports:\n  archive_all: false\n  countries:\n    - US\n    - NO\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        config = load_config(tmp_path)
+        assert config["airports"]["countries"] == ["US", "NO"]
+    finally:
+        os.unlink(tmp_path)
+
+
 def test_save_config_roundtrip():
     """Saving and re-loading a config produces identical values."""
     import copy

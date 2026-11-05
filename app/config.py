@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 import yaml
 
@@ -24,6 +25,19 @@ from app.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class _ConfigLoader(yaml.SafeLoader):
+    """YAML loader that treats only true/false as booleans (YAML 1.2 core)."""
+
+
+_CONFIG_BOOL_RE = re.compile(r"^(?:true|false|True|False|TRUE|FALSE)$")
+_ConfigLoader.yaml_implicit_resolvers = {
+    key: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"]
+    + [("tag:yaml.org,2002:bool", _CONFIG_BOOL_RE)]
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+
 
 DEFAULT_CONFIG = {
     "archive": {
@@ -239,7 +253,7 @@ def load_config(config_path: str | None = None) -> dict:
     if os.path.isfile(path):
         try:
             with open(path, "r", encoding="utf-8") as fh:
-                user_config = yaml.safe_load(fh) or {}
+                user_config = yaml.load(fh, Loader=_ConfigLoader) or {}
             config = _deep_merge(DEFAULT_CONFIG, user_config)
             logger.debug("Merged config from %s (%d top-level keys)", path, len(config))
             logger.info("Configuration loaded from %s", path)
