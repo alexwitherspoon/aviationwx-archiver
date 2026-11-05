@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 import yaml
 
@@ -24,6 +25,19 @@ from app.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class _ConfigLoader(yaml.SafeLoader):
+    """YAML loader that treats only true/false as booleans (YAML 1.2 core)."""
+
+
+_CONFIG_BOOL_RE = re.compile(r"^(?:true|false|True|False|TRUE|FALSE|yes|no|on|off)$")
+_ConfigLoader.yaml_implicit_resolvers = {
+    key: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"]
+    + [("tag:yaml.org,2002:bool", _CONFIG_BOOL_RE)]
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+
 
 DEFAULT_CONFIG = {
     "archive": {
@@ -57,6 +71,8 @@ DEFAULT_CONFIG = {
     "airports": {
         "archive_all": False,
         "selected": [],
+        "regions": [],
+        "countries": [],
     },
     "web": {
         "enabled": True,
@@ -119,6 +135,8 @@ _ENV_TO_CONFIG: list[tuple[str, tuple[str, ...], str | type]] = [
     ),
     ("ARCHIVER_AIRPORTS_ARCHIVE_ALL", ("airports", "archive_all"), bool),
     ("ARCHIVER_AIRPORTS_SELECTED", ("airports", "selected"), "list"),
+    ("ARCHIVER_AIRPORTS_REGIONS", ("airports", "regions"), "list"),
+    ("ARCHIVER_AIRPORTS_COUNTRIES", ("airports", "countries"), "list"),
     ("ARCHIVER_WEB_ENABLED", ("web", "enabled"), bool),
     ("ARCHIVER_WEB_PORT", ("web", "port"), int),
     ("ARCHIVER_WEB_HOST", ("web", "host"), str),
@@ -156,6 +174,24 @@ def _parse_env_list(val: str) -> list[str]:
         if s:
             items.append(s)
     return items
+
+
+def normalize_selector_codes(values) -> list[str]:
+    """Return uppercase, non-blank string selector codes from a value."""
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple, set)):
+        return []
+    result = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        code = value.strip().upper()
+        if code:
+            result.append(code)
+    return result
 
 
 def _env_overrides() -> dict:
@@ -217,7 +253,7 @@ def load_config(config_path: str | None = None) -> dict:
     if os.path.isfile(path):
         try:
             with open(path, "r", encoding="utf-8") as fh:
-                user_config = yaml.safe_load(fh) or {}
+                user_config = yaml.load(fh, Loader=_ConfigLoader) or {}
             config = _deep_merge(DEFAULT_CONFIG, user_config)
             logger.debug("Merged config from %s (%d top-level keys)", path, len(config))
             logger.info("Configuration loaded from %s", path)
@@ -304,12 +340,17 @@ def validate_config(config: dict) -> list[str]:
     """
     errors: list[str] = []
 
-    archive_all = config.get("airports", {}).get("archive_all", False)
-    selected = config.get("airports", {}).get("selected", [])
-    if not archive_all and not selected:
+    airports_cfg = config.get("airports", {})
+    archive_all = airports_cfg.get("archive_all", False)
+    has_selector = (
+        normalize_selector_codes(airports_cfg.get("selected"))
+        or normalize_selector_codes(airports_cfg.get("regions"))
+        or normalize_selector_codes(airports_cfg.get("countries"))
+    )
+    if not archive_all and not has_selector:
         errors.append(
             "Select at least one airport: enable 'Archive all airports' or add "
-            "airport codes (e.g. KSPB, KHIO) to the selected list."
+            "airport codes, regions, or countries to the selection."
         )
 
     output_dir = (config.get("archive", {}).get("output_dir") or "").strip()

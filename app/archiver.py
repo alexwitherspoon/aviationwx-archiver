@@ -16,6 +16,7 @@ import logging
 import os
 import random
 import re
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
@@ -23,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from app.config import _CONFIG_PATH_ENV, _DEFAULT_CONFIG_PATH, normalize_selector_codes
 from app.constants import (
     API_LIMIT_ANONYMOUS_REQ_PER_MIN,
     BYTES_PER_GIB,
@@ -39,6 +41,8 @@ _METADATA_JSON = "metadata.json"
 _ARCHIVE_INDEX_FILENAME = ".archive_index.json"
 _ARCHIVE_INDEX_LOCK = ".archive_index.lock"
 _ARCHIVE_INDEX_VERSION = 1
+_CATALOG_PROJECTION_FILENAME = "catalog.json"
+_CATALOG_PROJECTION_VERSION = 1
 
 
 def _archive_index_path(output_dir: str) -> str:
@@ -707,34 +711,147 @@ def fetch_webcam_catalog(config: dict) -> list[dict]:
     return []
 
 
+def _catalog_projection_path(config_path: str | None = None) -> str:
+    """Path to the catalog projection, next to the active config file."""
+    path = config_path or os.environ.get(_CONFIG_PATH_ENV, _DEFAULT_CONFIG_PATH)
+    return os.path.join(os.path.dirname(path), _CATALOG_PROJECTION_FILENAME)
+
+
+def build_catalog_projection(airports: list[dict]) -> list[dict]:
+    """Return a slim airport list with the selection and display fields."""
+    rows = []
+    for airport in airports:
+        code = _airport_code(airport)
+        if not code:
+            continue
+        rows.append(
+            {
+                "id": code.upper(),
+                "name": airport.get("name") or "",
+                "country": (airport.get("country") or "").upper() or None,
+                "country_name": airport.get("country_name") or None,
+                "region": (airport.get("region") or "").upper() or None,
+                "region_name": airport.get("region_name") or None,
+            }
+        )
+    return rows
+
+
+def write_catalog_projection(
+    airports: list[dict], config_path: str | None = None
+) -> bool:
+    """Write the catalog projection atomically; returns success."""
+    path = _catalog_projection_path(config_path)
+    data = {
+        "version": _CATALOG_PROJECTION_VERSION,
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "airports": build_catalog_projection(airports),
+    }
+    parent = os.path.dirname(path) or "."
+    try:
+        os.makedirs(parent, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=parent, prefix="catalog.", suffix=".tmp")
+    except OSError:
+        return False
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, separators=(",", ":"))
+        os.replace(tmp_path, path)
+        return True
+    except OSError:
+        return False
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+def load_catalog_projection(config_path: str | None = None) -> list[dict] | None:
+    """Return the stored projection airport list, or None when invalid."""
+    path = _catalog_projection_path(config_path)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.debug("Catalog projection load failed (%s): %s", path, exc)
+        return None
+    if not isinstance(data, dict) or data.get("version") != _CATALOG_PROJECTION_VERSION:
+        return None
+    airports = data.get("airports")
+    if not isinstance(airports, list):
+        return None
+    if not all(isinstance(row, dict) for row in airports):
+        return None
+    return airports
+
+
+def _selector_set(values: object) -> set[str]:
+    """Return an uppercase set of selector values, tolerating a scalar string."""
+    return set(normalize_selector_codes(values))
+
+
 def select_airports(all_airports: list[dict], config: dict) -> list[dict]:
     """
     Filter the full airport list according to configuration.
 
-    When ``airports.archive_all`` is True every airport is returned.
-    Otherwise only airports whose code appears in ``airports.selected`` are kept.
+    When ``airports.archive_all`` is True every airport is returned. Otherwise an
+    airport is kept when its code, region, or country matches any entry in
+    ``airports.selected``, ``airports.regions``, or ``airports.countries``.
+    Matching is case-insensitive; an airport without a region or country simply
+    does not match a region or country selection.
     """
-    if config["airports"].get("archive_all", False):
+    airports_cfg = config.get("airports", {})
+    if airports_cfg.get("archive_all", False):
         logger.debug(
             "Selected all %d airports (archive_all=true)",
             len(all_airports),
         )
         return all_airports
 
-    selected_codes = {c.upper() for c in config["airports"].get("selected", [])}
-    if not selected_codes:
+    selected_codes = _selector_set(airports_cfg.get("selected", []))
+    selected_regions = _selector_set(airports_cfg.get("regions", []))
+    selected_countries = _selector_set(airports_cfg.get("countries", []))
+    if not selected_codes and not selected_regions and not selected_countries:
         logger.warning(
             "No airports selected and archive_all is false; nothing to archive."
         )
         return []
 
-    filtered = [a for a in all_airports if _airport_code(a).upper() in selected_codes]
+    filtered = []
+    for airport in all_airports:
+        code = _airport_code(airport).upper()
+        region = (airport.get("region") or "").upper()
+        country = (airport.get("country") or "").upper()
+        if (
+            code in selected_codes
+            or (region and region in selected_regions)
+            or (country and country in selected_countries)
+        ):
+            filtered.append(airport)
+
     found_codes = {_airport_code(a).upper() for a in filtered}
     missing = selected_codes - found_codes
     if missing:
         logger.warning(
             "Selected airports not found in API: %s",
             ", ".join(sorted(missing)),
+        )
+
+    found_regions = {(a.get("region") or "").upper() for a in filtered}
+    missing_regions = selected_regions - found_regions
+    if missing_regions:
+        logger.warning(
+            "Selected regions not found in API: %s",
+            ", ".join(sorted(missing_regions)),
+        )
+
+    found_countries = {(a.get("country") or "").upper() for a in filtered}
+    missing_countries = selected_countries - found_countries
+    if missing_countries:
+        logger.warning(
+            "Selected countries not found in API: %s",
+            ", ".join(sorted(missing_countries)),
         )
 
     logger.debug(
@@ -2026,6 +2143,8 @@ def _run_archive_impl(
         logger.warning("No airports returned from API; skipping run.")
         stats["errors"] += 1
         return stats
+
+    write_catalog_projection(all_airports)
 
     airports = select_airports(all_airports, config)
     logger.info("Archiving %d airport(s).", len(airports))

@@ -43,6 +43,7 @@ from app.browse import (
 from app.config import (
     DEFAULT_SLOW_REQUEST_LOG_SECONDS,
     _coerce_float_for_validation,
+    normalize_selector_codes,
     save_config,
     validate_config,
 )
@@ -69,6 +70,7 @@ app = Flask(__name__)
 _archive_cache: dict[tuple, tuple[float, dict]] = {}
 _archive_cache_lock = threading.Lock()
 _ARCHIVE_CACHE_TTL_SEC = 60
+_source_test_lock = threading.Lock()
 
 
 def invalidate_archive_cache() -> None:
@@ -562,6 +564,37 @@ def trigger_archive():
     return redirect(url_for("dashboard"))
 
 
+@app.route("/config/test-source", methods=["POST"])
+def test_source():
+    """Fetch the catalog to confirm API access and seed the projection."""
+    if not _source_test_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "error": "A source check is already running."})
+    try:
+        config = app.config["ARCHIVER_CONFIG"]
+        try:
+            from app.archiver import fetch_webcam_catalog, write_catalog_projection
+
+            airports = fetch_webcam_catalog(config)
+        except Exception as exc:
+            logger.warning("Source test failed: %s", exc)
+            return jsonify(
+                {"ok": False, "error": "Could not reach the API. See the server logs."}
+            )
+        if not airports:
+            return jsonify({"ok": False, "error": "The API returned no airports."})
+        if not write_catalog_projection(airports):
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "Catalog fetched but could not be saved. "
+                    "Check that the config directory is writable.",
+                }
+            )
+        return jsonify({"ok": True, "count": len(airports)})
+    finally:
+        _source_test_lock.release()
+
+
 @app.route("/config", methods=["GET", "POST"])
 def configuration():
     config = app.config["ARCHIVER_CONFIG"]
@@ -587,6 +620,22 @@ def configuration():
             logger.warning("Configuration form error: %s", exc, exc_info=True)
             error = "Invalid form data. Check that all required fields are present."
 
+    from app.archiver import load_catalog_projection
+
+    projection = load_catalog_projection() or []
+    country_options = _projection_options(projection, "country", "country_name")
+    region_options = _projection_options(projection, "region", "region_name")
+    airports_cfg = config.get("airports") or {}
+    airports_cfg["selected"] = _normalize_selector_list(airports_cfg.get("selected"))
+    airports_cfg["countries"] = _normalize_selector_list(airports_cfg.get("countries"))
+    airports_cfg["regions"] = _normalize_selector_list(airports_cfg.get("regions"))
+    country_options = _with_saved_options(
+        country_options, airports_cfg.get("countries", [])
+    )
+    region_options = _with_saved_options(
+        region_options, airports_cfg.get("regions", [])
+    )
+
     config_errors = validate_config(config)
     return render_template(
         "config.html",
@@ -594,6 +643,8 @@ def configuration():
         message=message,
         error=error,
         config_errors=config_errors,
+        country_options=country_options,
+        region_options=region_options,
     )
 
 
@@ -855,6 +906,39 @@ def api_status():
 # ---------------------------------------------------------------------------
 
 
+def _projection_options(
+    rows: list[dict], code_key: str, name_key: str
+) -> list[tuple[str, str]]:
+    """Distinct (code, name) pairs from the projection, sorted by name."""
+    seen: dict[str, str] = {}
+    for row in rows:
+        code = row.get(code_key)
+        if not code:
+            continue
+        seen[str(code).upper()] = row.get(name_key) or str(code)
+    return sorted(seen.items(), key=lambda item: item[1].lower())
+
+
+def _with_saved_options(options, saved):
+    """Add configured selections to options so they stay renderable."""
+    if saved is None:
+        saved = []
+    elif isinstance(saved, str):
+        saved = [saved]
+    present = {code for code, _ in options}
+    for value in saved:
+        code = str(value).strip().upper()
+        if code and code not in present:
+            options.append((code, code))
+        present.add(code)
+    return sorted(options, key=lambda item: item[1].lower())
+
+
+def _normalize_selector_list(values):
+    """Canonical uppercase list from a null, scalar, or list value."""
+    return normalize_selector_codes(values)
+
+
 def _form_to_config(form, existing_config: dict) -> dict:
     """Convert web form POST data into a config dict."""
     import copy
@@ -910,6 +994,12 @@ def _form_to_config(form, existing_config: dict) -> dict:
         if c.strip()
     ]
     config["airports"]["selected"] = selected
+    config["airports"]["regions"] = [
+        r.strip().upper() for r in form.getlist("regions") if r.strip()
+    ]
+    config["airports"]["countries"] = [
+        c.strip().upper() for c in form.getlist("countries") if c.strip()
+    ]
 
     # Source
     api_key = form.get("api_key", "").strip()
