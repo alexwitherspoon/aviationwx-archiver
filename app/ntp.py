@@ -111,9 +111,20 @@ def check_ntp_time(
     return True
 
 
-def _update(status: str, offset: float | None, error: str | None) -> None:
-    """Update the health state, logging when the status changes."""
+def _norm_server(server) -> str:
+    """Coerce the configured server to a usable string, else the default."""
+    if isinstance(server, str):
+        server = server.strip()
+        if server:
+            return server
+    return _DEFAULT_NTP_SERVER
+
+
+def _check_result(server: str, status: str, offset, error) -> None:
+    """Publish a result only when it still corresponds to the current server."""
     with _lock:
+        if _state["server"] != server:
+            return
         previous = _state["status"]
         _state["status"] = status
         _state["offset_sec"] = offset
@@ -125,18 +136,18 @@ def _update(status: str, offset: float | None, error: str | None) -> None:
 
 def _check_once(server: str = _DEFAULT_NTP_SERVER) -> None:
     """Perform one NTP check against ``server`` and update the health state."""
-    server = (server or _DEFAULT_NTP_SERVER).strip() or _DEFAULT_NTP_SERVER
+    server = _norm_server(server)
     with _lock:
         _state["server"] = server
     try:
         offset = _query_offset(server)
     except Exception as exc:
-        _update("unknown", None, str(exc))
+        _check_result(server, "unknown", None, str(exc))
         return
     if abs(offset) > _NTP_OFFSET_THRESHOLD_SEC:
-        _update("unhealthy", offset, None)
+        _check_result(server, "unhealthy", offset, None)
     else:
-        _update("healthy", offset, None)
+        _check_result(server, "healthy", offset, None)
 
 
 def _monitor_loop(server_getter, interval_sec: float) -> None:
@@ -162,6 +173,23 @@ def start_ntp_monitor(
         daemon=True,
         name="ntp-monitor",
     ).start()
+
+
+def set_ntp_server(server) -> None:
+    """Switch the monitored server, clear stale results, and re-check now."""
+    server = _norm_server(server)
+    changed = False
+    with _lock:
+        if _state["server"] != server:
+            _state["server"] = server
+            _state["status"] = "unknown"
+            _state["offset_sec"] = None
+            _state["last_error"] = None
+            changed = True
+    if changed:
+        threading.Thread(
+            target=_check_once, args=(server,), daemon=True, name="ntp-recheck"
+        ).start()
 
 
 def get_ntp_status() -> dict:
