@@ -31,7 +31,7 @@ class _ConfigLoader(yaml.SafeLoader):
     """YAML loader that treats only true/false as booleans (YAML 1.2 core)."""
 
 
-_CONFIG_BOOL_RE = re.compile(r"^(?:true|false|True|False|TRUE|FALSE)$")
+_CONFIG_BOOL_RE = re.compile(r"^(?:true|false|True|False|TRUE|FALSE|yes|no|on|off)$")
 _ConfigLoader.yaml_implicit_resolvers = {
     key: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"]
     + [("tag:yaml.org,2002:bool", _CONFIG_BOOL_RE)]

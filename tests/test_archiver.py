@@ -71,6 +71,23 @@ def test_load_config_preserves_unquoted_no_country_code():
         os.unlink(tmp_path)
 
 
+def test_load_config_preserves_legacy_lowercase_booleans():
+    """Lowercase no/off still load as booleans, while uppercase NO stays a string."""
+    from app.config import load_config
+
+    content = "airports:\n  archive_all: no\nweb:\n  enabled: off\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        config = load_config(tmp_path)
+        assert config["airports"]["archive_all"] is False
+        assert config["web"]["enabled"] is False
+    finally:
+        os.unlink(tmp_path)
+
+
 def test_save_config_roundtrip():
     """Saving and re-loading a config produces identical values."""
     import copy
