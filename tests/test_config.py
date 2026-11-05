@@ -13,10 +13,10 @@ from app.config import check_host_resources, load_config
 # ---------------------------------------------------------------------------
 
 
-def test_ntp_server_defaults_to_pool():
-    """ntp.server defaults to pool.ntp.org when not configured."""
+def test_ntp_server_defaults_to_cloudflare():
+    """ntp.server defaults to time.cloudflare.com when not configured."""
     config = load_config("/nonexistent/config.yaml")
-    assert config["ntp"]["server"] == "pool.ntp.org"
+    assert config["ntp"]["server"] == "time.cloudflare.com"
 
 
 def test_load_config_env_var_overrides_ntp_server():

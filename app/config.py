@@ -81,7 +81,7 @@ DEFAULT_CONFIG = {
         "file": "",
     },
     "ntp": {
-        "server": "pool.ntp.org",
+        "server": "time.cloudflare.com",
     },
 }
 

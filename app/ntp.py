@@ -21,8 +21,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Default NTP server when none is configured (pool.ntp.org round-robins).
-_DEFAULT_NTP_SERVER = "pool.ntp.org"
+# Default NTP server when none is configured.
+_DEFAULT_NTP_SERVER = "time.cloudflare.com"
 
 # Max allowed offset (seconds) between system UTC and NTP before marking unhealthy
 _NTP_OFFSET_THRESHOLD_SEC = 10
