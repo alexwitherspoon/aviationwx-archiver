@@ -131,6 +131,49 @@ def test_check_once_marks_unknown_when_query_fails():
     assert state["last_error"] == "unreachable"
 
 
+def test_check_once_uses_configured_server():
+    """_check_once records and queries the given server."""
+    from app.ntp import _check_once
+
+    state = {"status": "unknown"}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", return_value=0.1) as mock_query:
+            _check_once("10.0.0.5")
+
+    assert state["server"] == "10.0.0.5"
+    assert state["status"] == "healthy"
+    mock_query.assert_called_once_with("10.0.0.5")
+
+
+def test_check_once_tolerates_non_string_server():
+    """_check_once falls back to the default server instead of raising."""
+    from app.ntp import _DEFAULT_NTP_SERVER, _check_once
+
+    state = {"status": "unknown"}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", return_value=0.1) as mock_query:
+            _check_once(123)
+
+    assert state["status"] == "healthy"
+    mock_query.assert_called_once_with(_DEFAULT_NTP_SERVER)
+
+
+def test_set_ntp_server_resets_state_and_rechecks():
+    """set_ntp_server clears stale results and triggers an immediate recheck."""
+    from app.ntp import set_ntp_server
+
+    state = {"server": "pool.ntp.org", "status": "healthy", "offset_sec": 0.1}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp.threading.Thread") as mock_thread:
+            set_ntp_server("time.cloudflare.com")
+
+    assert state["server"] == "time.cloudflare.com"
+    assert state["status"] == "unknown"
+    assert state["offset_sec"] is None
+    mock_thread.assert_called_once()
+    assert mock_thread.call_args.kwargs["daemon"] is True
+
+
 def test_start_ntp_monitor_starts_daemon_thread():
     """start_ntp_monitor launches a daemon thread."""
     from app.ntp import start_ntp_monitor
