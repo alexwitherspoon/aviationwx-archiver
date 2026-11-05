@@ -653,6 +653,25 @@ def test_with_saved_options_keeps_configured_selections():
     assert ("CA", "CA") in result
 
 
+def test_with_saved_options_treats_none_as_empty():
+    """_with_saved_options handles a null saved selector."""
+    from app.web import _with_saved_options
+
+    assert _with_saved_options([("US", "United States of America")], None) == [
+        ("US", "United States of America")
+    ]
+
+
+def test_normalize_selector_list_uppercases_and_defaults():
+    """_normalize_selector_list returns an uppercase list from null/scalar/list."""
+    from app.web import _normalize_selector_list
+
+    assert _normalize_selector_list(None) == []
+    assert _normalize_selector_list("us-or") == ["US-OR"]
+    assert _normalize_selector_list(["ca", "US", "us-or"]) == ["CA", "US", "US-OR"]
+    assert _normalize_selector_list(42) == []
+
+
 def test_config_page_renders_region_options(flask_client):
     """GET /config lists countries and regions from the projection."""
     projection = [

@@ -16,6 +16,7 @@ import logging
 import os
 import random
 import re
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
@@ -746,17 +747,24 @@ def write_catalog_projection(
         "updated": datetime.now(timezone.utc).isoformat(),
         "airports": build_catalog_projection(airports),
     }
-    tmp_path = path + ".tmp"
+    parent = os.path.dirname(path) or "."
     try:
-        parent = os.path.dirname(path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        with open(tmp_path, "w", encoding="utf-8") as fh:
+        os.makedirs(parent, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=parent, prefix="catalog.", suffix=".tmp")
+    except OSError:
+        return False
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(data, fh, separators=(",", ":"))
         os.replace(tmp_path, path)
         return True
     except OSError:
         return False
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def load_catalog_projection(config_path: str | None = None) -> list[dict] | None:

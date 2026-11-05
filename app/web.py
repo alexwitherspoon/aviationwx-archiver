@@ -625,6 +625,9 @@ def configuration():
     country_options = _projection_options(projection, "country", "country_name")
     region_options = _projection_options(projection, "region", "region_name")
     airports_cfg = config.get("airports") or {}
+    airports_cfg["selected"] = _normalize_selector_list(airports_cfg.get("selected"))
+    airports_cfg["countries"] = _normalize_selector_list(airports_cfg.get("countries"))
+    airports_cfg["regions"] = _normalize_selector_list(airports_cfg.get("regions"))
     country_options = _with_saved_options(
         country_options, airports_cfg.get("countries", [])
     )
@@ -917,7 +920,9 @@ def _projection_options(
 
 def _with_saved_options(options, saved):
     """Add configured selections to options so they stay renderable."""
-    if isinstance(saved, str):
+    if saved is None:
+        saved = []
+    elif isinstance(saved, str):
         saved = [saved]
     present = {code for code, _ in options}
     for value in saved:
@@ -926,6 +931,22 @@ def _with_saved_options(options, saved):
             options.append((code, code))
         present.add(code)
     return sorted(options, key=lambda item: item[1].lower())
+
+
+def _normalize_selector_list(values):
+    """Canonical uppercase list from a null, scalar, or list value."""
+    if values is None:
+        return []
+    if isinstance(values, str):
+        return [values.strip().upper()] if values.strip() else []
+    if not isinstance(values, (list, tuple, set)):
+        return []
+    result = []
+    for value in values:
+        code = str(value).strip().upper()
+        if code:
+            result.append(code)
+    return result
 
 
 def _form_to_config(form, existing_config: dict) -> dict:
