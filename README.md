@@ -82,6 +82,8 @@ Key settings:
 | `schedule.retention_minute` | `0` | Daily retention cleanup minute (0-59). |
 | `airports.archive_all` | `false` | Archive every airport on AviationWX.org |
 | `airports.selected` | `[KSPB, KHIO]` | Specific airport codes when archive_all is false |
+| `airports.countries` | `[]` | Country codes (ISO 3166-1 alpha-2) to archive. Combines with regions and selected. |
+| `airports.regions` | `[]` | Region codes (ISO 3166-2, e.g. `US-OR`) to archive. Combines with countries and selected. |
 | `source.use_history_api` | `true` | Use history API to fetch all frames, download only missing; `false` = current image only per run |
 | `source.api_key` | `""` | Partner API key (optional). Enables 500 req/min vs 100/min anonymous. |
 | `source.request_delay_seconds` | `1.2` | Fallback delay when rate-limit probe fails; otherwise auto-detected from API (50% of limit) |
@@ -108,6 +110,8 @@ Any config setting can be overridden via `ARCHIVER_*` environment variables. Env
 | `ARCHIVER_SOURCE_API_KEY` | `source.api_key` | `your-key` |
 | `ARCHIVER_AIRPORTS_ARCHIVE_ALL` | `airports.archive_all` | `false` |
 | `ARCHIVER_AIRPORTS_SELECTED` | `airports.selected` | `KSPB,KHIO` |
+| `ARCHIVER_AIRPORTS_COUNTRIES` | `airports.countries` | `US,CA` |
+| `ARCHIVER_AIRPORTS_REGIONS` | `airports.regions` | `US-OR,US-ID` |
 | `ARCHIVER_WEB_ENABLED` | `web.enabled` | `true` |
 | `ARCHIVER_WEB_PRIORITY_YIELD_SECONDS` | `web.priority_yield_seconds` | `0.02` |
 | `ARCHIVER_LOGGING_LEVEL` | `logging.level` | `INFO` |
