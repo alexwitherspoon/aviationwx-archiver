@@ -520,6 +520,20 @@ def test_select_airports_ignores_airports_without_region_or_country():
     assert result == []
 
 
+def test_select_airports_tolerates_scalar_selector():
+    """A scalar region YAML value matches the whole code, not its characters."""
+    from app.archiver import select_airports
+
+    all_airports = [
+        {"code": "KSPB", "region": "US-OR", "country": "US"},
+        {"code": "KBOI", "region": "US-ID", "country": "US"},
+    ]
+    config = {"airports": {"archive_all": False, "selected": [], "regions": "US-OR"}}
+
+    result = select_airports(all_airports, config)
+    assert [a["code"] for a in result] == ["KSPB"]
+
+
 # ---------------------------------------------------------------------------
 # Image URL helpers
 # ---------------------------------------------------------------------------

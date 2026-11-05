@@ -69,6 +69,7 @@ app = Flask(__name__)
 _archive_cache: dict[tuple, tuple[float, dict]] = {}
 _archive_cache_lock = threading.Lock()
 _ARCHIVE_CACHE_TTL_SEC = 60
+_source_test_lock = threading.Lock()
 
 
 def invalidate_archive_cache() -> None:
@@ -565,18 +566,32 @@ def trigger_archive():
 @app.route("/config/test-source", methods=["POST"])
 def test_source():
     """Fetch the catalog to confirm API access and seed the projection."""
-    config = app.config["ARCHIVER_CONFIG"]
+    if not _source_test_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "error": "A source check is already running."})
     try:
-        from app.archiver import fetch_webcam_catalog, write_catalog_projection
+        config = app.config["ARCHIVER_CONFIG"]
+        try:
+            from app.archiver import fetch_webcam_catalog, write_catalog_projection
 
-        airports = fetch_webcam_catalog(config)
-    except Exception as exc:
-        logger.warning("Source test failed: %s", exc)
-        return jsonify({"ok": False, "error": f"Could not reach the API: {exc}"})
-    if not airports:
-        return jsonify({"ok": False, "error": "The API returned no airports."})
-    write_catalog_projection(airports)
-    return jsonify({"ok": True, "count": len(airports)})
+            airports = fetch_webcam_catalog(config)
+        except Exception as exc:
+            logger.warning("Source test failed: %s", exc)
+            return jsonify(
+                {"ok": False, "error": "Could not reach the API. See the server logs."}
+            )
+        if not airports:
+            return jsonify({"ok": False, "error": "The API returned no airports."})
+        if not write_catalog_projection(airports):
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": "Catalog fetched but could not be saved. "
+                    "Check that the config directory is writable.",
+                }
+            )
+        return jsonify({"ok": True, "count": len(airports)})
+    finally:
+        _source_test_lock.release()
 
 
 @app.route("/config", methods=["GET", "POST"])
@@ -609,6 +624,13 @@ def configuration():
     projection = load_catalog_projection() or []
     country_options = _projection_options(projection, "country", "country_name")
     region_options = _projection_options(projection, "region", "region_name")
+    airports_cfg = config.get("airports") or {}
+    country_options = _with_saved_options(
+        country_options, airports_cfg.get("countries", [])
+    )
+    region_options = _with_saved_options(
+        region_options, airports_cfg.get("regions", [])
+    )
 
     config_errors = validate_config(config)
     return render_template(
@@ -891,6 +913,19 @@ def _projection_options(
             continue
         seen[str(code).upper()] = row.get(name_key) or str(code)
     return sorted(seen.items(), key=lambda item: item[1].lower())
+
+
+def _with_saved_options(options, saved):
+    """Add configured selections to options so they stay renderable."""
+    if isinstance(saved, str):
+        saved = [saved]
+    present = {code for code, _ in options}
+    for value in saved:
+        code = str(value).strip().upper()
+        if code and code not in present:
+            options.append((code, code))
+        present.add(code)
+    return sorted(options, key=lambda item: item[1].lower())
 
 
 def _form_to_config(form, existing_config: dict) -> dict:

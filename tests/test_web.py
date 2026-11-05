@@ -631,6 +631,28 @@ def test_test_source_reports_failure_when_no_airports(flask_client):
     assert "error" in data
 
 
+def test_test_source_reports_failure_when_write_fails(flask_client):
+    """test-source reports an error when the projection cannot be written."""
+    with patch("app.archiver.fetch_webcam_catalog", return_value=[{"id": "kspb"}]):
+        with patch("app.archiver.write_catalog_projection", return_value=False):
+            resp = flask_client.post("/config/test-source")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert "could not be saved" in data["error"].lower()
+
+
+def test_with_saved_options_keeps_configured_selections():
+    """_with_saved_options keeps configured codes even when missing from options."""
+    from app.web import _with_saved_options
+
+    options = [("US", "United States of America")]
+    result = _with_saved_options(options, ["CA"])
+    assert ("US", "United States of America") in result
+    assert ("CA", "CA") in result
+
+
 def test_config_page_renders_region_options(flask_client):
     """GET /config lists countries and regions from the projection."""
     projection = [

@@ -748,7 +748,9 @@ def write_catalog_projection(
     }
     tmp_path = path + ".tmp"
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         with open(tmp_path, "w", encoding="utf-8") as fh:
             json.dump(data, fh, separators=(",", ":"))
         os.replace(tmp_path, path)
@@ -772,6 +774,15 @@ def load_catalog_projection(config_path: str | None = None) -> list[dict] | None
     return airports if isinstance(airports, list) else None
 
 
+def _selector_set(values: object) -> set[str]:
+    """Return an uppercase set of selector values, tolerating a scalar string."""
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple, set)):
+        return set()
+    return {str(value).strip().upper() for value in values if str(value).strip()}
+
+
 def select_airports(all_airports: list[dict], config: dict) -> list[dict]:
     """
     Filter the full airport list according to configuration.
@@ -790,9 +801,9 @@ def select_airports(all_airports: list[dict], config: dict) -> list[dict]:
         )
         return all_airports
 
-    selected_codes = {c.upper() for c in airports_cfg.get("selected", [])}
-    selected_regions = {r.upper() for r in airports_cfg.get("regions", [])}
-    selected_countries = {c.upper() for c in airports_cfg.get("countries", [])}
+    selected_codes = _selector_set(airports_cfg.get("selected", []))
+    selected_regions = _selector_set(airports_cfg.get("regions", []))
+    selected_countries = _selector_set(airports_cfg.get("countries", []))
     if not selected_codes and not selected_regions and not selected_countries:
         logger.warning(
             "No airports selected and archive_all is false; nothing to archive."

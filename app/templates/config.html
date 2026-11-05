@@ -182,7 +182,8 @@
       .then(function (data) {
         if (data.ok) {
           result.style.color = 'var(--success)';
-          result.textContent = 'Reachable: ' + data.count + ' airports.';
+          result.textContent = 'Reachable: ' + data.count + ' airports. Reloading...';
+          window.location.reload();
         } else {
           result.style.color = 'var(--error)';
           result.textContent = data.error;
