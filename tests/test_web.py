@@ -583,6 +583,33 @@ def test_configuration_post_rejects_root_output_dir(flask_client):
         assert b"Invalid" in resp.data or b"error" in resp.data.lower()
 
 
+def test_test_source_seeds_projection_on_success(flask_client):
+    """test-source fetches the catalog and writes the projection."""
+    with patch(
+        "app.archiver.fetch_webcam_catalog", return_value=[{"id": "kspb"}]
+    ) as fetch:
+        with patch("app.archiver.write_catalog_projection", return_value=True) as write:
+            resp = flask_client.post("/config/test-source")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["count"] == 1
+    fetch.assert_called_once()
+    write.assert_called_once()
+
+
+def test_test_source_reports_failure_when_no_airports(flask_client):
+    """test-source reports an error when the API returns no airports."""
+    with patch("app.archiver.fetch_webcam_catalog", return_value=[]):
+        resp = flask_client.post("/config/test-source")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert "error" in data
+
+
 def test_trigger_archive_redirects_to_config_when_invalid(flask_client):
     """POST to /run redirects to config page when config is invalid."""
     config = {

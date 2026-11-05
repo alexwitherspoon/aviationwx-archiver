@@ -562,6 +562,23 @@ def trigger_archive():
     return redirect(url_for("dashboard"))
 
 
+@app.route("/config/test-source", methods=["POST"])
+def test_source():
+    """Fetch the catalog to confirm API access and seed the projection."""
+    config = app.config["ARCHIVER_CONFIG"]
+    try:
+        from app.archiver import fetch_webcam_catalog, write_catalog_projection
+
+        airports = fetch_webcam_catalog(config)
+    except Exception as exc:
+        logger.warning("Source test failed: %s", exc)
+        return jsonify({"ok": False, "error": f"Could not reach the API: {exc}"})
+    if not airports:
+        return jsonify({"ok": False, "error": "The API returned no airports."})
+    write_catalog_projection(airports)
+    return jsonify({"ok": True, "count": len(airports)})
+
+
 @app.route("/config", methods=["GET", "POST"])
 def configuration():
     config = app.config["ARCHIVER_CONFIG"]

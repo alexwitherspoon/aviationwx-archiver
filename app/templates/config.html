@@ -127,6 +127,11 @@
           {% endfor %}
         </select>
       </div>
+      <div>
+        <label>API access</label>
+        <button type="button" id="test-source-btn" class="btn">Test / refresh catalog</button>
+        <small id="test-source-result" style="color:var(--text-muted)">Confirms the source is reachable and refreshes the region list.</small>
+      </div>
     </div>
   </div>
 
@@ -134,4 +139,29 @@
   <a href="{{ url_for('dashboard') }}" class="btn" style="margin-left:8px">Cancel</a>
 
 </form>
+<script>
+  document.getElementById('test-source-btn').addEventListener('click', function () {
+    const btn = this;
+    const result = document.getElementById('test-source-result');
+    btn.disabled = true;
+    result.style.color = 'var(--text-muted)';
+    result.textContent = 'Checking...';
+    fetch('{{ url_for("test_source") }}', { method: 'POST' })
+      .then(function (resp) { return resp.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          result.style.color = 'var(--success)';
+          result.textContent = 'Reachable: ' + data.count + ' airports.';
+        } else {
+          result.style.color = 'var(--error)';
+          result.textContent = data.error;
+        }
+      })
+      .catch(function (err) {
+        result.style.color = 'var(--error)';
+        result.textContent = 'Request failed: ' + err;
+      })
+      .finally(function () { btn.disabled = false; });
+  });
+</script>
 {% endblock %}
