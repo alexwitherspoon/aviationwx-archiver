@@ -943,7 +943,9 @@ def _normalize_selector_list(values):
         return []
     result = []
     for value in values:
-        code = str(value).strip().upper()
+        if not isinstance(value, str):
+            continue
+        code = value.strip().upper()
         if code:
             result.append(code)
     return result

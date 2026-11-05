@@ -788,7 +788,11 @@ def _selector_set(values: object) -> set[str]:
         values = [values]
     if not isinstance(values, (list, tuple, set)):
         return set()
-    return {str(value).strip().upper() for value in values if str(value).strip()}
+    return {
+        value.strip().upper()
+        for value in values
+        if isinstance(value, str) and value.strip()
+    }
 
 
 def select_airports(all_airports: list[dict], config: dict) -> list[dict]:

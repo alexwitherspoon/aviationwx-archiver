@@ -672,6 +672,16 @@ def test_normalize_selector_list_uppercases_and_defaults():
     assert _normalize_selector_list(42) == []
 
 
+def test_normalize_selector_list_ignores_non_string_elements():
+    """_normalize_selector_list drops None, numbers, and booleans from a list."""
+    from app.web import _normalize_selector_list
+
+    assert _normalize_selector_list([None, 42, True, "US", "us-or"]) == [
+        "US",
+        "US-OR",
+    ]
+
+
 def test_config_page_renders_region_options(flask_client):
     """GET /config lists countries and regions from the projection."""
     projection = [

@@ -534,6 +534,13 @@ def test_select_airports_tolerates_scalar_selector():
     assert [a["code"] for a in result] == ["KSPB"]
 
 
+def test_selector_set_ignores_non_string_elements():
+    """_selector_set drops None, numbers, and booleans instead of codifying them."""
+    from app.archiver import _selector_set
+
+    assert _selector_set([None, 42, True, "us-or", " US "]) == {"US-OR", "US"}
+
+
 # ---------------------------------------------------------------------------
 # Image URL helpers
 # ---------------------------------------------------------------------------
