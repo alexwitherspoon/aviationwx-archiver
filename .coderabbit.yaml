@@ -1,0 +1,97 @@
+# CodeRabbit configuration for aviationwx-archiver
+# Public repo. Free (OSS) tier.
+#
+# Intent: a Docker utility that fetches and archives webcam images with a Flask
+# GUI. The review surface is smaller than the other two repos; weight config
+# validation, locking/concurrency, and atomic file writes over style.
+
+language: en-US
+enable_free_tier: true
+
+tone_instructions: "Plain, direct technical English. Lead with correctness: locking, atomic writes, retention, credential and config hygiene. Cite file and line. Skip filler praise and pure-style nitpicks. No em dashes."
+
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  abort_on_close: true
+
+  # Draft PRs are the only hold. Everything else gets reviewed.
+  auto_review:
+    enabled: true
+    drafts: false
+
+  auto_approvals:
+    enabled: false
+
+  path_filters:
+    - "!__pycache__/**"
+    - "!.pytest_cache/**"
+    - "!.ruff_cache/**"
+    - "!.venv/**"
+    - "!venv/**"
+
+  # Point, don't duplicate: the locking/atomic-write/retention/config/no-secrets
+  # rules live in copilot-instructions.md and CODE_STYLE.md, referenced below.
+  # path_instructions only carry what those docs do not say.
+  path_instructions:
+    - path: "Dockerfile"
+      instructions: |
+        CD surface for ghcr.io images. Verify pinned base digest, non-root user + gosu
+        privilege drop, and that the multi-stage copy paths stay correct.
+    - path: ".github/workflows/**"
+      instructions: |
+        CI/CD. Pin action SHAs with version comments and minimal permissions blocks, and
+        keep release.yml version resolution (tag-on-CI-commit) correct.
+
+  tools:
+    ruff: { enabled: true }
+    shellcheck: { enabled: true }
+    hadolint: { enabled: true }
+    actionlint: { enabled: true }
+    zizmor: { enabled: true }
+    gitleaks: { enabled: true }
+    # Disabled: redundancy or no matching config in this repo.
+    ast-grep: { enabled: false }
+    checkmake: { enabled: false }
+    flake8: { enabled: false }
+    pylint: { enabled: false }
+    semgrep: { enabled: false }
+    opengrep: { enabled: false }
+    trufflehog: { enabled: false }
+    checkov: { enabled: false }
+    trivy: { enabled: false }
+    osvScanner: { enabled: false }
+    markdownlint: { enabled: false }
+    languagetool: { enabled: false }
+    biome: { enabled: false }
+    oxc: { enabled: false }
+    stylelint: { enabled: false }
+    htmlhint: { enabled: false }
+    eslint: { enabled: false }
+    vale: { enabled: false }
+    yamllint: { enabled: false }
+    golangci-lint: { enabled: false }
+    phpstan: { enabled: false }
+    phpcs: { enabled: false }
+    phpmd: { enabled: false }
+    clang: { enabled: false }
+    cppcheck: { enabled: false }
+
+chat:
+  auto_reply: true
+  art: true
+
+knowledge_base:
+  linked_repositories:
+    - repository: "alexwitherspoon/aviationwx"
+      instructions: "The source site this utility archives from. Changes to the webcam API routes, image formats, and airport config affect what gets archived."
+    - repository: "alexwitherspoon/aviationwx-bridge"
+      instructions: "Go daemon that uploads fresh webcam snapshots upstream. Changes to image quality or format there flow downstream to the archive."
+  code_guidelines:
+    # Review rules are pointed at, not restated.
+    filePatterns:
+      - files: "CODE_STYLE.md,CONTRIBUTING.md,.github/copilot-instructions.md,REGION_SELECTION_SPEC.md"
+        applyTo: "**"
