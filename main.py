@@ -20,7 +20,7 @@ from app.config import (
     load_config,
 )
 from app.constants import DEFAULT_WAITRESS_THREADS
-from app.ntp import start_ntp_monitor
+from app.ntp import set_ntp_server, start_ntp_monitor
 from app.scheduler import start_scheduler
 from app.web import app
 
@@ -107,9 +107,8 @@ def main() -> None:
     # Web UI and NTP monitor read config through a getter so UI changes take
     # effect without a restart.
     app.config["ARCHIVER_CONFIG"] = config
-    start_ntp_monitor(
-        lambda: (app.config["ARCHIVER_CONFIG"].get("ntp") or {}).get("server")
-    )
+    set_ntp_server(config.get("ntp", {}).get("server"))
+    start_ntp_monitor()
 
     scheduler = start_scheduler(lambda: app.config["ARCHIVER_CONFIG"])
 

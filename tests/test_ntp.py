@@ -211,3 +211,22 @@ def test_start_ntp_monitor_starts_daemon_thread():
     mock_thread.assert_called_once()
     assert mock_thread.call_args.kwargs["daemon"] is True
     mock_thread.return_value.start.assert_called_once()
+
+
+def test_monitor_loop_does_not_change_server():
+    """The monitor checks the current snapshot without reinstating a server."""
+    from app.ntp import _monitor_loop
+
+    state = {"server": "time.cloudflare.com", "status": "unknown", "generation": 2}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._check_once") as mock_check:
+            with patch("app.ntp.time.sleep", side_effect=KeyboardInterrupt):
+                try:
+                    _monitor_loop()
+                except KeyboardInterrupt:
+                    pass
+
+    # The configured server is untouched by a monitor pass; it stays what the
+    # config path chose.
+    assert state["server"] == "time.cloudflare.com"
+    mock_check.assert_called_once_with("time.cloudflare.com", 2)

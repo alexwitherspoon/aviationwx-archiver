@@ -164,28 +164,23 @@ def _check_once(server=_DEFAULT_NTP_SERVER, generation: int | None = None) -> No
         _check_result(server, generation, "healthy", offset, None)
 
 
-def _monitor_loop(server_getter, interval_sec: float) -> None:
-    """Adopt the configured server, then run a scheduled check each pass."""
+def _monitor_loop(interval_sec: float = _NTP_MONITOR_INTERVAL_SEC) -> None:
+    """Run a scheduled check of the currently configured server each pass.
+
+    The server is owned by set_ntp_server; this loop only checks the current
+    snapshot, so it cannot reinstate a server the configuration moved away from.
+    """
     while True:
-        try:
-            server = _norm_server(server_getter())
-        except Exception:
-            server = _DEFAULT_NTP_SERVER
-        set_ntp_server(server)
         cur_server, cur_generation = _snapshot()
         _check_once(cur_server, cur_generation)
         time.sleep(interval_sec)
 
 
-def start_ntp_monitor(
-    server_getter=None, interval_sec: float = _NTP_MONITOR_INTERVAL_SEC
-) -> None:
+def start_ntp_monitor(interval_sec: float = _NTP_MONITOR_INTERVAL_SEC) -> None:
     """Start the background NTP health monitor thread."""
-    if server_getter is None:
-        server_getter = lambda: _DEFAULT_NTP_SERVER  # noqa: E731
     threading.Thread(
         target=_monitor_loop,
-        args=(server_getter, interval_sec),
+        args=(interval_sec,),
         daemon=True,
         name="ntp-monitor",
     ).start()
