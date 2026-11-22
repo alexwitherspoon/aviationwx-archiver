@@ -166,6 +166,42 @@ def test_check_once_discards_stale_generation():
     assert state["offset_sec"] == 0.7
 
 
+def test_monitor_loop_drops_inflight_check_after_server_switch():
+    """A server switch during a monitor pass keeps the new server and stale health."""
+    from app.ntp import _check_once as real_check
+    from app.ntp import _monitor_loop, set_ntp_server
+
+    state = {
+        "server": "server-a",
+        "status": "unknown",
+        "offset_sec": None,
+        "generation": 0,
+    }
+
+    def paused(server, generation):
+        # The monitor took its snapshot (server-a, gen 0). While paused, a save
+        # lands and switches the configured server to B.
+        set_ntp_server("server-b")
+        # Resume the in-flight pass; it checks the stale snapshot.
+        return real_check(server, generation)
+
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._check_once", side_effect=paused):
+            with patch("app.ntp.threading.Thread"):  # suppress the recheck thread
+                with patch("app.ntp._query_offset", return_value=0.01):
+                    with patch("app.ntp.time.sleep", side_effect=KeyboardInterrupt):
+                        try:
+                            _monitor_loop()
+                        except KeyboardInterrupt:
+                            pass
+
+    # B stays selected and health stays unknown; the stale A result is dropped.
+    assert state["server"] == "server-b"
+    assert state["generation"] == 1
+    assert state["status"] == "unknown"
+    assert state["offset_sec"] is None
+
+
 def test_inflight_check_for_old_server_is_dropped_after_switch():
     """A server switch drops an in-flight check for the old server."""
     from app.ntp import _check_once, set_ntp_server
