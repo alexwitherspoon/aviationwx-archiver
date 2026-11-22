@@ -18,7 +18,6 @@
 - [ ] Documentation updated (if needed)
 - [ ] No sensitive data (API keys, passwords, credentials)
 - [ ] Code follows [CODE_STYLE.md](CODE_STYLE.md)
-- [ ] No AI-generated temp files (research, analysis, plans) in commit
 
 ## Related Issues
 
