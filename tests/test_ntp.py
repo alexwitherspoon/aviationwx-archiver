@@ -94,9 +94,9 @@ def test_ntp_is_healthy_reflects_status():
 
 def test_check_once_marks_healthy_when_offset_within_threshold():
     """_check_once marks healthy when the offset is within threshold."""
-    from app.ntp import _check_once
+    from app.ntp import _DEFAULT_NTP_SERVER, _check_once
 
-    state = {"status": "unknown"}
+    state = {"server": _DEFAULT_NTP_SERVER, "status": "unknown", "generation": 0}
     with patch("app.ntp._state", state):
         with patch("app.ntp._query_offset", return_value=0.5):
             _check_once()
@@ -109,7 +109,7 @@ def test_check_once_marks_unhealthy_when_offset_exceeds_threshold():
     """_check_once marks unhealthy when the offset exceeds the threshold."""
     from app.ntp import _check_once
 
-    state = {"status": "healthy"}
+    state = {"server": "time.cloudflare.com", "status": "healthy", "generation": 0}
     with patch("app.ntp._state", state):
         with patch("app.ntp._query_offset", return_value=120.0):
             _check_once()
@@ -122,7 +122,7 @@ def test_check_once_marks_unknown_when_query_fails():
     """_check_once marks unknown (and records the error) when the query fails."""
     from app.ntp import _check_once
 
-    state = {"status": "healthy"}
+    state = {"server": "time.cloudflare.com", "status": "healthy", "generation": 0}
     with patch("app.ntp._state", state):
         with patch("app.ntp._query_offset", side_effect=OSError("unreachable")):
             _check_once()
@@ -132,24 +132,45 @@ def test_check_once_marks_unknown_when_query_fails():
 
 
 def test_check_once_uses_configured_server():
-    """_check_once records and queries the given server."""
+    """_check_once probes the given server without changing selection."""
     from app.ntp import _check_once
 
-    state = {"status": "unknown"}
+    state = {"server": "time.cloudflare.com", "status": "unknown", "generation": 0}
     with patch("app.ntp._state", state):
         with patch("app.ntp._query_offset", return_value=0.1) as mock_query:
-            _check_once("10.0.0.5")
+            _check_once("time.cloudflare.com")
 
-    assert state["server"] == "10.0.0.5"
+    # A worker reports under the current generation; it must not rewrite server.
+    assert state["server"] == "time.cloudflare.com"
     assert state["status"] == "healthy"
-    mock_query.assert_called_once_with("10.0.0.5")
+    mock_query.assert_called_once_with("time.cloudflare.com")
+
+
+def test_check_once_discards_stale_generation():
+    """_check_once drops a result from a generation that is no longer current."""
+    from app.ntp import _check_once
+
+    state = {
+        "server": "time.cloudflare.com",
+        "status": "unknown",
+        "offset_sec": 0.7,
+        "generation": 3,
+    }
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", return_value=0.1):
+            # This check ran for generation 1, but the configured server and
+            # generation have since moved on, so its result must be dropped.
+            _check_once("10.0.0.5", generation=1)
+
+    assert state["status"] == "unknown"
+    assert state["offset_sec"] == 0.7
 
 
 def test_check_once_tolerates_non_string_server():
     """_check_once falls back to the default server instead of raising."""
     from app.ntp import _DEFAULT_NTP_SERVER, _check_once
 
-    state = {"status": "unknown"}
+    state = {"server": _DEFAULT_NTP_SERVER, "status": "unknown", "generation": 0}
     with patch("app.ntp._state", state):
         with patch("app.ntp._query_offset", return_value=0.1) as mock_query:
             _check_once(123)
@@ -162,12 +183,18 @@ def test_set_ntp_server_resets_state_and_rechecks():
     """set_ntp_server clears stale results and triggers an immediate recheck."""
     from app.ntp import set_ntp_server
 
-    state = {"server": "pool.ntp.org", "status": "healthy", "offset_sec": 0.1}
+    state = {
+        "server": "pool.ntp.org",
+        "status": "healthy",
+        "offset_sec": 0.1,
+        "generation": 0,
+    }
     with patch("app.ntp._state", state):
         with patch("app.ntp.threading.Thread") as mock_thread:
             set_ntp_server("time.cloudflare.com")
 
     assert state["server"] == "time.cloudflare.com"
+    assert state["generation"] == 1
     assert state["status"] == "unknown"
     assert state["offset_sec"] is None
     mock_thread.assert_called_once()

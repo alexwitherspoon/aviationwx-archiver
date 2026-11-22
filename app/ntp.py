@@ -44,6 +44,9 @@ _state = {
     "server": _DEFAULT_NTP_SERVER,
     "threshold_sec": _NTP_OFFSET_THRESHOLD_SEC,
     "interval_sec": _NTP_MONITOR_INTERVAL_SEC,
+    # Bumped whenever the configured server changes, so a check that started
+    # against an older server cannot publish a stale result.
+    "generation": 0,
 }
 
 
@@ -120,10 +123,16 @@ def _norm_server(server) -> str:
     return _DEFAULT_NTP_SERVER
 
 
-def _check_result(server: str, status: str, offset, error) -> None:
-    """Publish a result only when it still corresponds to the current server."""
+def _snapshot() -> tuple[str, int]:
+    """Return the current (server, generation), owned by the config path."""
     with _lock:
-        if _state["server"] != server:
+        return _state["server"], _state.get("generation", 0)
+
+
+def _check_result(server: str, generation: int, status: str, offset, error) -> None:
+    """Publish a result only when its server is still the current one."""
+    with _lock:
+        if _state["server"] != server or _state.get("generation", 0) != generation:
             return
         previous = _state["status"]
         _state["status"] = status
@@ -134,30 +143,37 @@ def _check_result(server: str, status: str, offset, error) -> None:
         logger.info("NTP health: %s -> %s", previous, status)
 
 
-def _check_once(server: str = _DEFAULT_NTP_SERVER) -> None:
-    """Perform one NTP check against ``server`` and update the health state."""
+def _check_once(server=_DEFAULT_NTP_SERVER, generation: int | None = None) -> None:
+    """Check ``server`` and publish the result if it is still current.
+
+    The server selection is owned by the config path, so this worker never
+    writes ``_state["server"]``. It runs the probe and reports under the
+    generation it was launched for; a stale result is discarded.
+    """
     server = _norm_server(server)
-    with _lock:
-        _state["server"] = server
+    if generation is None:
+        generation = _snapshot()[1]
     try:
         offset = _query_offset(server)
     except Exception as exc:
-        _check_result(server, "unknown", None, str(exc))
+        _check_result(server, generation, "unknown", None, str(exc))
         return
     if abs(offset) > _NTP_OFFSET_THRESHOLD_SEC:
-        _check_result(server, "unhealthy", offset, None)
+        _check_result(server, generation, "unhealthy", offset, None)
     else:
-        _check_result(server, "healthy", offset, None)
+        _check_result(server, generation, "healthy", offset, None)
 
 
 def _monitor_loop(server_getter, interval_sec: float) -> None:
-    """Check NTP on a fixed interval, re-reading the server each pass."""
+    """Adopt the configured server, then run a scheduled check each pass."""
     while True:
         try:
-            server = server_getter()
+            server = _norm_server(server_getter())
         except Exception:
             server = _DEFAULT_NTP_SERVER
-        _check_once(server)
+        set_ntp_server(server)
+        cur_server, cur_generation = _snapshot()
+        _check_once(cur_server, cur_generation)
         time.sleep(interval_sec)
 
 
@@ -178,18 +194,18 @@ def start_ntp_monitor(
 def set_ntp_server(server) -> None:
     """Switch the monitored server, clear stale results, and re-check now."""
     server = _norm_server(server)
-    changed = False
     with _lock:
-        if _state["server"] != server:
-            _state["server"] = server
-            _state["status"] = "unknown"
-            _state["offset_sec"] = None
-            _state["last_error"] = None
-            changed = True
-    if changed:
-        threading.Thread(
-            target=_check_once, args=(server,), daemon=True, name="ntp-recheck"
-        ).start()
+        if _state["server"] == server:
+            return
+        _state["generation"] = _state.get("generation", 0) + 1
+        _state["server"] = server
+        _state["status"] = "unknown"
+        _state["offset_sec"] = None
+        _state["last_error"] = None
+        generation = _state["generation"]
+    threading.Thread(
+        target=_check_once, args=(server, generation), daemon=True, name="ntp-recheck"
+    ).start()
 
 
 def get_ntp_status() -> dict:
