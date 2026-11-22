@@ -166,6 +166,33 @@ def test_check_once_discards_stale_generation():
     assert state["offset_sec"] == 0.7
 
 
+def test_inflight_check_for_old_server_is_dropped_after_switch():
+    """A server switch drops an in-flight check for the old server."""
+    from app.ntp import _check_once, set_ntp_server
+
+    state = {
+        "server": "server-a",
+        "status": "unknown",
+        "offset_sec": None,
+        "generation": 0,
+    }
+    with patch("app.ntp._state", state):
+        # A save switches to B. The recheck it schedules is suppressed by
+        # replacing threading.Thread, so this test stays deterministic.
+        with patch("app.ntp.threading.Thread"):
+            set_ntp_server("server-b")
+        # The in-flight check launched for A under generation 0 finishes late.
+        with patch("app.ntp._query_offset", return_value=0.01):
+            _check_once("server-a", generation=0)
+
+    # The stale A result is dropped: B stays the server and health stays
+    # unknown, so A cannot restore an accurate-clock result after the switch.
+    assert state["server"] == "server-b"
+    assert state["generation"] == 1
+    assert state["status"] == "unknown"
+    assert state["offset_sec"] is None
+
+
 def test_check_once_tolerates_non_string_server():
     """_check_once falls back to the default server instead of raising."""
     from app.ntp import _DEFAULT_NTP_SERVER, _check_once
