@@ -27,10 +27,10 @@ Part of the [AviationWX.org](https://github.com/alexwitherspoon/aviationwx) proj
 
 ```bash
 # Bleeding edge (latest main)
-docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:edge
+docker pull ghcr.io/alexwitherspoon/aviationwx-org-archiver:edge
 
 # Latest stable release
-docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest
+docker pull ghcr.io/alexwitherspoon/aviationwx-org-archiver:latest
 ```
 
 Then run with volumes (see Docker section below).
@@ -131,7 +131,7 @@ docker run -d \
   -e ARCHIVER_AIRPORTS_SELECTED=KSPB,KHIO \
   -e ARCHIVER_SCHEDULE_INTERVAL_MINUTES=15 \
   -e ARCHIVER_SOURCE_API_KEY=your-partner-key \
-  ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest
+  ghcr.io/alexwitherspoon/aviationwx-org-archiver:latest
 ```
 
 ## Archive Layout
@@ -199,10 +199,10 @@ Pre-built images are published to GitHub Container Registry:
 
 ```bash
 # Bleeding edge (latest main)
-docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:edge
+docker pull ghcr.io/alexwitherspoon/aviationwx-org-archiver:edge
 
 # Latest stable release
-docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest
+docker pull ghcr.io/alexwitherspoon/aviationwx-org-archiver:latest
 ```
 
 Or build from source:
@@ -234,14 +234,14 @@ docker run -d \
   -v $(pwd)/archive:/archive \
   -v config_data:/config \
   -e ARCHIVER_AIRPORTS_SELECTED=KSPB,KHIO \
-  ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest
+  ghcr.io/alexwitherspoon/aviationwx-org-archiver:latest
 ```
 
 ### Unraid
 
 1. **Docker** → **Add Container**
 2. **Name:** `aviationwx-archiver`
-3. **Repository:** `ghcr.io/alexwitherspoon/aviationwx.org-archiver:latest` (or `:edge` for latest main)
+3. **Repository:** `ghcr.io/alexwitherspoon/aviationwx-org-archiver:latest` (or `:edge` for latest main)
 4. **Network Type:** Bridge
 5. **Port:** Host `8080` → Container `8080`
 6. **Volume mappings:**
