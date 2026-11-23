@@ -76,6 +76,12 @@ airports:
     - KSPB
     - KHIO
 
+  # Country codes (ISO 3166-1 alpha-2). Combines with selected and regions.
+  countries: []
+
+  # Region codes (ISO 3166-2, admin-1, e.g. US-OR). Combines with selected and countries.
+  regions: []
+
 # ============================================================
 # Web GUI
 # ============================================================

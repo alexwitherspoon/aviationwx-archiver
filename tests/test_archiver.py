@@ -55,6 +55,39 @@ def test_load_config_reads_yaml_file():
         os.unlink(tmp_path)
 
 
+def test_load_config_preserves_unquoted_no_country_code():
+    """Unquoted NO in YAML loads as the string NO, not boolean False."""
+    from app.config import load_config
+
+    content = "airports:\n  archive_all: false\n  countries:\n    - US\n    - NO\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        config = load_config(tmp_path)
+        assert config["airports"]["countries"] == ["US", "NO"]
+    finally:
+        os.unlink(tmp_path)
+
+
+def test_load_config_preserves_legacy_lowercase_booleans():
+    """Lowercase no/off still load as booleans, while uppercase NO stays a string."""
+    from app.config import load_config
+
+    content = "airports:\n  archive_all: no\nweb:\n  enabled: off\n"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        config = load_config(tmp_path)
+        assert config["airports"]["archive_all"] is False
+        assert config["web"]["enabled"] is False
+    finally:
+        os.unlink(tmp_path)
+
+
 def test_save_config_roundtrip():
     """Saving and re-loading a config produces identical values."""
     import copy
@@ -179,6 +212,42 @@ def test_validate_config_valid_with_selected():
         "source": {"airports_api_url": "https://api.example.com/airports"},
     }
     assert validate_config(config) == []
+
+
+def test_validate_config_valid_with_regions():
+    """Config is valid when a region is selected without codes or archive_all."""
+    from app.config import validate_config
+
+    config = {
+        "archive": {"output_dir": "/archive", "retention_days": 0},
+        "airports": {"archive_all": False, "selected": [], "regions": ["US-OR"]},
+        "source": {"airports_api_url": "https://api.example.com/airports"},
+    }
+    assert validate_config(config) == []
+
+
+def test_validate_config_valid_with_countries():
+    """Config is valid when a country is selected without codes or archive_all."""
+    from app.config import validate_config
+
+    config = {
+        "archive": {"output_dir": "/archive", "retention_days": 0},
+        "airports": {"archive_all": False, "selected": [], "countries": ["US"]},
+        "source": {"airports_api_url": "https://api.example.com/airports"},
+    }
+    assert validate_config(config) == []
+
+
+def test_validate_config_rejects_only_non_string_selectors():
+    """Selectors with only non-string values are invalid, matching select_airports."""
+    from app.config import validate_config
+
+    config = {
+        "archive": {"output_dir": "/archive", "retention_days": 0},
+        "airports": {"archive_all": False, "selected": [42], "regions": [None]},
+        "source": {"airports_api_url": "https://api.example.com/airports"},
+    }
+    assert validate_config(config) != []
 
 
 def test_check_host_resources_warns_when_output_dir_missing():
@@ -432,6 +501,89 @@ def test_select_airports_uses_icao_when_no_code_or_id():
 
     result = select_airports(all_airports, config)
     assert len(result) == 1
+
+
+def test_select_airports_by_region():
+    """Airports matching a selected region are kept, others dropped."""
+    from app.archiver import select_airports
+
+    all_airports = [
+        {"code": "KSPB", "region": "US-OR", "country": "US"},
+        {"code": "KBOI", "region": "US-ID", "country": "US"},
+    ]
+    config = {"airports": {"archive_all": False, "selected": [], "regions": ["US-ID"]}}
+
+    result = select_airports(all_airports, config)
+    assert [a["code"] for a in result] == ["KBOI"]
+
+
+def test_select_airports_by_country():
+    """Airports matching a selected country are kept, case-insensitively."""
+    from app.archiver import select_airports
+
+    all_airports = [
+        {"code": "KSPB", "region": "US-OR", "country": "US"},
+        {"code": "CYVR", "region": "CA-BC", "country": "CA"},
+    ]
+    config = {"airports": {"archive_all": False, "selected": [], "countries": ["ca"]}}
+
+    result = select_airports(all_airports, config)
+    assert [a["code"] for a in result] == ["CYVR"]
+
+
+def test_select_airports_unions_codes_regions_and_countries():
+    """Codes, regions, and countries OR together into one set."""
+    from app.archiver import select_airports
+
+    all_airports = [
+        {"code": "KSPB", "region": "US-OR", "country": "US"},
+        {"code": "KBOI", "region": "US-ID", "country": "US"},
+        {"code": "KPWT", "region": "US-WA", "country": "US"},
+        {"code": "CYVR", "region": "CA-BC", "country": "CA"},
+    ]
+    config = {
+        "airports": {
+            "archive_all": False,
+            "selected": ["KSPB"],
+            "regions": ["US-ID"],
+            "countries": ["CA"],
+        }
+    }
+
+    result = select_airports(all_airports, config)
+    assert {a["code"] for a in result} == {"KSPB", "KBOI", "CYVR"}
+
+
+def test_select_airports_ignores_airports_without_region_or_country():
+    """An airport without region/country only matches by code, not by region."""
+    from app.archiver import select_airports
+
+    all_airports = [{"code": "KSPB"}]
+    config = {"airports": {"archive_all": False, "selected": [], "regions": ["US-OR"]}}
+
+    result = select_airports(all_airports, config)
+    assert result == []
+
+
+def test_select_airports_tolerates_scalar_selector():
+    """A scalar region YAML value matches the whole code, not its characters."""
+    from app.archiver import select_airports
+
+    all_airports = [
+        {"code": "KSPB", "region": "US-OR", "country": "US"},
+        {"code": "KBOI", "region": "US-ID", "country": "US"},
+    ]
+    config = {"airports": {"archive_all": False, "selected": [], "regions": "US-OR"}}
+
+    result = select_airports(all_airports, config)
+    assert [a["code"] for a in result] == ["KSPB"]
+
+
+def test_selector_set_ignores_non_string_elements():
+    """_selector_set drops None, numbers, and booleans instead of codifying them."""
+    from app.archiver import _selector_set
+
+    assert _selector_set([None, 42, True, "us-or", " US "]) == {"US-OR", "US"}
 
 
 # ---------------------------------------------------------------------------
@@ -1219,6 +1371,83 @@ def test_bulk_api_url_targets_final_airports_segment():
         _bulk_api_url(config)
         == "https://api.example.com/airports-proxy/v1/weathercam/bulk"
     )
+
+
+def test_catalog_projection_path_lives_next_to_config():
+    """Projection path is derived from the active config file's directory."""
+    from app.archiver import _catalog_projection_path
+
+    assert _catalog_projection_path("/config/config.yaml").endswith(
+        "/config/catalog.json"
+    )
+
+
+def test_build_catalog_projection_selects_fields():
+    """Projection keeps id, name, country, and region, uppercasing codes."""
+    from app.archiver import build_catalog_projection
+
+    airports = [
+        {
+            "id": "kspb",
+            "name": "Scappoose",
+            "country": "us",
+            "country_name": "United States",
+            "region": "us-or",
+            "region_name": "Oregon",
+            "webcams": [{"index": 0}],  # dropped
+        },
+    ]
+    assert build_catalog_projection(airports) == [
+        {
+            "id": "KSPB",
+            "name": "Scappoose",
+            "country": "US",
+            "country_name": "United States",
+            "region": "US-OR",
+            "region_name": "Oregon",
+        }
+    ]
+
+
+def test_write_and_load_catalog_projection_roundtrip():
+    """A written projection loads back with the same airports."""
+    from app.archiver import load_catalog_projection, write_catalog_projection
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = os.path.join(tmpdir, "config.yaml")
+        airports = [
+            {"id": "kspb", "name": "Scappoose", "country": "US", "region": "US-OR"}
+        ]
+        assert write_catalog_projection(airports, config_path=config_path) is True
+        assert load_catalog_projection(config_path=config_path) == [
+            {
+                "id": "KSPB",
+                "name": "Scappoose",
+                "country": "US",
+                "country_name": None,
+                "region": "US-OR",
+                "region_name": None,
+            }
+        ]
+
+
+def test_load_catalog_projection_returns_none_when_missing():
+    """Missing projection file returns None."""
+    from app.archiver import load_catalog_projection
+
+    assert load_catalog_projection(config_path="/nonexistent/dir/config.yaml") is None
+
+
+def test_load_catalog_projection_rejects_non_mapping_rows():
+    """A projection whose airports are not dicts returns None."""
+    from app.archiver import load_catalog_projection
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config_path = os.path.join(tmpdir, "config.yaml")
+        proj_path = os.path.join(tmpdir, "catalog.json")
+        with open(proj_path, "w") as fh:
+            json.dump({"version": 1, "airports": ["kspb", "kboi"]}, fh)
+        assert load_catalog_projection(config_path=config_path) is None
 
 
 def test_fetch_webcam_catalog_success():
