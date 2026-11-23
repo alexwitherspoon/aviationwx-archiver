@@ -80,6 +80,9 @@ DEFAULT_CONFIG = {
         "level": "INFO",
         "file": "",
     },
+    "ntp": {
+        "server": "time.cloudflare.com",
+    },
 }
 
 _CONFIG_PATH_ENV = "ARCHIVER_CONFIG"
@@ -139,6 +142,7 @@ _ENV_TO_CONFIG: list[tuple[str, tuple[str, ...], str | type]] = [
     ),
     ("ARCHIVER_LOGGING_LEVEL", ("logging", "level"), str),
     ("ARCHIVER_LOGGING_FILE", ("logging", "file"), str),
+    ("ARCHIVER_NTP_SERVER", ("ntp", "server"), str),
 ]
 
 
@@ -236,6 +240,11 @@ def load_config(config_path: str | None = None) -> dict:
     if env_overrides:
         config = _deep_merge(config, env_overrides)
         logger.debug("Applied config overrides from ARCHIVER_* environment variables")
+
+    # A null or non-mapping ntp section collapses the default; restore it so the
+    # monitor and GUI always see a mapping.
+    if not isinstance(config.get("ntp"), dict):
+        config["ntp"] = dict(DEFAULT_CONFIG["ntp"])
 
     return config
 
@@ -405,6 +414,14 @@ def validate_config(config: dict) -> list[str]:
         errors.append(slow_err)
     elif slow is not None and (slow < 0 or slow > 300):
         errors.append("web.slow_request_log_seconds must be between 0 and 300.")
+
+    ntp_cfg = config.get("ntp")
+    if isinstance(ntp_cfg, dict):
+        server = ntp_cfg.get("server")
+        if server is not None and not isinstance(server, str):
+            errors.append("ntp.server must be a string.")
+        elif not str(server or "").strip():
+            errors.append("ntp.server must not be empty.")
 
     if errors:
         logger.debug("Config validation failed: %s", "; ".join(errors))

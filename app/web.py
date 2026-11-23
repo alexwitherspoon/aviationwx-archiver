@@ -56,7 +56,7 @@ from app.constants import (
     DEFAULT_LOG_DISPLAY_COUNT,
     PERCENT_SCALE,
 )
-from app.ntp import get_ntp_status
+from app.ntp import get_ntp_status, set_ntp_server
 from app.scheduler import consume_archive_cache_dirty_flags, get_state, trigger_run
 from app.version import GIT_SHA, VERSION
 
@@ -574,6 +574,7 @@ def configuration():
             if save_config(new_config):
                 app.config["ARCHIVER_CONFIG"] = new_config
                 config = new_config
+                set_ntp_server(new_config.get("ntp", {}).get("server"))
                 message = (
                     "Configuration saved successfully. Note: changes to scheduling "
                     "settings (such as interval minutes) will not take effect until "
@@ -915,6 +916,11 @@ def _form_to_config(form, existing_config: dict) -> dict:
     api_key = form.get("api_key", "").strip()
     if api_key:
         config["source"]["api_key"] = api_key
+
+    # Time (NTP)
+    ntp_server = form.get("ntp_server", "").strip()
+    if ntp_server:
+        config["ntp"]["server"] = ntp_server
 
     # Logging
     log_level = form.get("log_level", "INFO").strip().upper()

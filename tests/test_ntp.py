@@ -94,9 +94,9 @@ def test_ntp_is_healthy_reflects_status():
 
 def test_check_once_marks_healthy_when_offset_within_threshold():
     """_check_once marks healthy when the offset is within threshold."""
-    from app.ntp import _check_once
+    from app.ntp import _DEFAULT_NTP_SERVER, _check_once
 
-    state = {"status": "unknown"}
+    state = {"server": _DEFAULT_NTP_SERVER, "status": "unknown", "generation": 0}
     with patch("app.ntp._state", state):
         with patch("app.ntp._query_offset", return_value=0.5):
             _check_once()
@@ -109,7 +109,7 @@ def test_check_once_marks_unhealthy_when_offset_exceeds_threshold():
     """_check_once marks unhealthy when the offset exceeds the threshold."""
     from app.ntp import _check_once
 
-    state = {"status": "healthy"}
+    state = {"server": "time.cloudflare.com", "status": "healthy", "generation": 0}
     with patch("app.ntp._state", state):
         with patch("app.ntp._query_offset", return_value=120.0):
             _check_once()
@@ -122,13 +122,146 @@ def test_check_once_marks_unknown_when_query_fails():
     """_check_once marks unknown (and records the error) when the query fails."""
     from app.ntp import _check_once
 
-    state = {"status": "healthy"}
+    state = {"server": "time.cloudflare.com", "status": "healthy", "generation": 0}
     with patch("app.ntp._state", state):
         with patch("app.ntp._query_offset", side_effect=OSError("unreachable")):
             _check_once()
 
     assert state["status"] == "unknown"
     assert state["last_error"] == "unreachable"
+
+
+def test_check_once_uses_configured_server():
+    """_check_once probes the given server without changing selection."""
+    from app.ntp import _check_once
+
+    state = {"server": "time.cloudflare.com", "status": "unknown", "generation": 0}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", return_value=0.1) as mock_query:
+            _check_once("time.cloudflare.com")
+
+    # A worker reports under the current generation; it must not rewrite server.
+    assert state["server"] == "time.cloudflare.com"
+    assert state["status"] == "healthy"
+    mock_query.assert_called_once_with("time.cloudflare.com")
+
+
+def test_check_once_discards_stale_generation():
+    """_check_once drops a result from a generation that is no longer current."""
+    from app.ntp import _check_once
+
+    state = {
+        "server": "time.cloudflare.com",
+        "status": "unknown",
+        "offset_sec": 0.7,
+        "generation": 3,
+    }
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", return_value=0.1):
+            # This check ran for generation 1, but the configured server and
+            # generation have since moved on, so its result must be dropped.
+            _check_once("10.0.0.5", generation=1)
+
+    assert state["status"] == "unknown"
+    assert state["offset_sec"] == 0.7
+
+
+def test_monitor_loop_drops_inflight_check_after_server_switch():
+    """A server switch during a monitor pass keeps the new server and stale health."""
+    from app.ntp import _check_once as real_check
+    from app.ntp import _monitor_loop, set_ntp_server
+
+    state = {
+        "server": "server-a",
+        "status": "unknown",
+        "offset_sec": None,
+        "generation": 0,
+    }
+
+    def paused(server, generation):
+        # The monitor took its snapshot (server-a, gen 0). While paused, a save
+        # lands and switches the configured server to B.
+        set_ntp_server("server-b")
+        # Resume the in-flight pass; it checks the stale snapshot.
+        return real_check(server, generation)
+
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._check_once", side_effect=paused):
+            with patch("app.ntp.threading.Thread"):  # suppress the recheck thread
+                with patch("app.ntp._query_offset", return_value=0.01):
+                    with patch("app.ntp.time.sleep", side_effect=KeyboardInterrupt):
+                        try:
+                            _monitor_loop()
+                        except KeyboardInterrupt:
+                            pass
+
+    # B stays selected and health stays unknown; the stale A result is dropped.
+    assert state["server"] == "server-b"
+    assert state["generation"] == 1
+    assert state["status"] == "unknown"
+    assert state["offset_sec"] is None
+
+
+def test_inflight_check_for_old_server_is_dropped_after_switch():
+    """A server switch drops an in-flight check for the old server."""
+    from app.ntp import _check_once, set_ntp_server
+
+    state = {
+        "server": "server-a",
+        "status": "unknown",
+        "offset_sec": None,
+        "generation": 0,
+    }
+    with patch("app.ntp._state", state):
+        # A save switches to B. The recheck it schedules is suppressed by
+        # replacing threading.Thread, so this test stays deterministic.
+        with patch("app.ntp.threading.Thread"):
+            set_ntp_server("server-b")
+        # The in-flight check launched for A under generation 0 finishes late.
+        with patch("app.ntp._query_offset", return_value=0.01):
+            _check_once("server-a", generation=0)
+
+    # The stale A result is dropped: B stays the server and health stays
+    # unknown, so A cannot restore an accurate-clock result after the switch.
+    assert state["server"] == "server-b"
+    assert state["generation"] == 1
+    assert state["status"] == "unknown"
+    assert state["offset_sec"] is None
+
+
+def test_check_once_tolerates_non_string_server():
+    """_check_once falls back to the default server instead of raising."""
+    from app.ntp import _DEFAULT_NTP_SERVER, _check_once
+
+    state = {"server": _DEFAULT_NTP_SERVER, "status": "unknown", "generation": 0}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._query_offset", return_value=0.1) as mock_query:
+            _check_once(123)
+
+    assert state["status"] == "healthy"
+    mock_query.assert_called_once_with(_DEFAULT_NTP_SERVER)
+
+
+def test_set_ntp_server_resets_state_and_rechecks():
+    """set_ntp_server clears stale results and triggers an immediate recheck."""
+    from app.ntp import set_ntp_server
+
+    state = {
+        "server": "pool.ntp.org",
+        "status": "healthy",
+        "offset_sec": 0.1,
+        "generation": 0,
+    }
+    with patch("app.ntp._state", state):
+        with patch("app.ntp.threading.Thread") as mock_thread:
+            set_ntp_server("time.cloudflare.com")
+
+    assert state["server"] == "time.cloudflare.com"
+    assert state["generation"] == 1
+    assert state["status"] == "unknown"
+    assert state["offset_sec"] is None
+    mock_thread.assert_called_once()
+    assert mock_thread.call_args.kwargs["daemon"] is True
 
 
 def test_start_ntp_monitor_starts_daemon_thread():
@@ -141,3 +274,22 @@ def test_start_ntp_monitor_starts_daemon_thread():
     mock_thread.assert_called_once()
     assert mock_thread.call_args.kwargs["daemon"] is True
     mock_thread.return_value.start.assert_called_once()
+
+
+def test_monitor_loop_does_not_change_server():
+    """The monitor checks the current snapshot without reinstating a server."""
+    from app.ntp import _monitor_loop
+
+    state = {"server": "time.cloudflare.com", "status": "unknown", "generation": 2}
+    with patch("app.ntp._state", state):
+        with patch("app.ntp._check_once") as mock_check:
+            with patch("app.ntp.time.sleep", side_effect=KeyboardInterrupt):
+                try:
+                    _monitor_loop()
+                except KeyboardInterrupt:
+                    pass
+
+    # The configured server is untouched by a monitor pass; it stays what the
+    # config path chose.
+    assert state["server"] == "time.cloudflare.com"
+    mock_check.assert_called_once_with("time.cloudflare.com", 2)

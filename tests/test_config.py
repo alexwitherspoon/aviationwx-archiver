@@ -13,6 +13,20 @@ from app.config import check_host_resources, load_config
 # ---------------------------------------------------------------------------
 
 
+def test_ntp_server_defaults_to_cloudflare():
+    """ntp.server defaults to time.cloudflare.com when not configured."""
+    with patch.dict(os.environ, {"ARCHIVER_NTP_SERVER": ""}, clear=False):
+        config = load_config("/nonexistent/config.yaml")
+    assert config["ntp"]["server"] == "time.cloudflare.com"
+
+
+def test_load_config_env_var_overrides_ntp_server():
+    """ARCHIVER_NTP_SERVER overrides the default NTP server."""
+    with patch.dict(os.environ, {"ARCHIVER_NTP_SERVER": "10.0.0.5"}, clear=False):
+        config = load_config("/nonexistent/config.yaml")
+    assert config["ntp"]["server"] == "10.0.0.5"
+
+
 def test_load_config_env_var_overrides_output_dir():
     """ARCHIVER_ARCHIVE_OUTPUT_DIR overrides config file and defaults."""
     with patch.dict(

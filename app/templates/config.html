@@ -130,6 +130,20 @@
     </div>
   </div>
 
+  <!-- Time -->
+  <div class="card">
+    <h2>Time <span class="field-hint">(optional)</span></h2>
+    <div class="grid-2">
+      <div>
+        <label for="ntp_server">NTP server</label>
+        <input type="text" id="ntp_server" name="ntp_server"
+               value="{{ config.ntp.server }}"
+               placeholder="time.cloudflare.com">
+        <small style="color:var(--text-muted)">Archiving pauses until this server confirms an accurate clock. Use a local server if outbound NTP is blocked.</small>
+      </div>
+    </div>
+  </div>
+
   <button type="submit" class="primary">💾 Save Configuration</button>
   <a href="{{ url_for('dashboard') }}" class="btn" style="margin-left:8px">Cancel</a>
 
