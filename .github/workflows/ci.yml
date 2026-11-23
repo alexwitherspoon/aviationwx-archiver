@@ -93,18 +93,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-
-      # A first-published personal-account GHCR package is private, and
-      # GITHUB_TOKEN cannot change visibility. Flip it to public with a PAT
-      # secret when provided; without one, no-op (the owner can still pull).
-      - name: Set package visibility to public
-        if: env.GHCR_PUBLIC_TOKEN != ''
-        env:
-          GHCR_PUBLIC_TOKEN: ${{ secrets.GHCR_PUBLIC_TOKEN }}
-        run: |
-          curl -s -X POST \
-            -H "Authorization: Bearer ${GHCR_PUBLIC_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/user/packages/container/aviationwx-org-archiver/visibility \
-            -d '{"visibility":"public"}'
           cache-to: type=gha,mode=max
