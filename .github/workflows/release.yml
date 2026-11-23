@@ -17,7 +17,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: alexwitherspoon/aviationwx.org-archiver
+  IMAGE_NAME: alexwitherspoon/aviationwx-org-archiver
 
 jobs:
   resolve-version:
@@ -144,9 +144,11 @@ jobs:
             ### Docker
 
             ```bash
-            docker pull ghcr.io/alexwitherspoon/aviationwx.org-archiver:${{ steps.version.outputs.VERSION_NUM }}
+            docker pull ghcr.io/alexwitherspoon/aviationwx-org-archiver:${{ steps.version.outputs.VERSION_NUM }}
             ```
 
             Or use `:latest` for the latest stable release.
+
+            **Note**: the image moved from `ghcr.io/alexwitherspoon/aviationwx.org-archiver` to the hyphenated `ghcr.io/alexwitherspoon/aviationwx-org-archiver`. GHCR does not redirect, so if you were pulling the old dot path, switch to the new one and re-pull.
           draft: false
           prerelease: false
